@@ -1,4 +1,4 @@
-# kb3lyb-sway greeter (DESIGN §2: greetd + tuigreet).
+# kb3lyb-shack greeter (DESIGN §2: greetd + tuigreet).
 # The session command is /usr/bin/kb3lyb-greeter, a thin wrapper that paints the
 # whole VT Norton blue (redefines console palette color 0) and then execs tuigreet
 # with the Norton Utilities palette (blue field, light-cyan borders, light-yellow

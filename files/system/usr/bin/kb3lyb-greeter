@@ -1,0 +1,33 @@
+#!/bin/sh
+# kb3lyb-greeter — greetd session command. Wraps tuigreet and paints the
+# WHOLE login screen in the exact Norton palette from markearnest.net's norton-simple
+# theme (navy field, bright-blue border, cyan accents, white text).
+#
+# tuigreet only colors its container and uses named/ANSI colors. To hit the exact
+# hex, we redefine the Linux console palette entries that tuigreet's named colors map
+# to, using the private OSC `ESC ] P n RRGGBB` (n = one hex nibble for the index):
+#   0  default bg   -> #000080   (navy — fills every unpainted cell)
+#   4  "blue"       -> #000080   (container background)
+#   C  "lightblue"  -> #5555ff   (border highlight)
+#   E  "lightcyan"  -> #00ffff   (title/prompt/accents)
+#   F  "white"      -> #ffffff   (text/input)
+# tuigreet draws a single-tone border (no per-side bevel — that needs a graphical
+# greeter), so the box outline is uniform #5555ff. This only works on a real Linux
+# VT (fbcon), which is exactly where greetd runs it.
+#
+# LOGIN-CRITICAL: `exec tuigreet` is the last line and the cosmetic printf/clear are
+# guarded with `|| true`, so a failure in the color step can never block login. If
+# tuigreet itself is ever misconfigured, roll back to the previous deployment from
+# the boot menu (SETUP §6 / §8).
+printf '\033]P0000080\033]P4000080\033]PC5555ff\033]PE00ffff\033]PFffffff' 2>/dev/null || true
+clear 2>/dev/null || true
+
+exec tuigreet \
+  --theme 'container=blue;border=lightblue;title=lightcyan;greet=lightcyan;text=white;time=lightcyan;prompt=lightcyan;input=white;action=lightcyan;button=lightcyan' \
+  --greeting 'KB3LYB' \
+  --window-padding 2 \
+  --time \
+  --remember \
+  --remember-session \
+  --asterisks \
+  --cmd 'niri --session'

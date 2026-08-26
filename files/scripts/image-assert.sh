@@ -152,8 +152,53 @@ assert_file_has "niri config carries the floating window rules for ham apps" \
 # so the tool that turns that silence into output has to actually be present.
 assert "window-rule checker present (the rules fail silently without it)" \
   test -x /usr/bin/kb3lyb-check-window-rules
+
+# Every command the niri config spawns or binds must actually exist. Generalised
+# from the greetd defect above: baked config that names a binary is a promise,
+# and nothing else in the build checks the promise is kept. A missing spawn here
+# is quieter than the greeter was — the session still starts, you just silently
+# have no bar, no notifications, or no polkit agent.
+missing_spawn=""
+for _c in $(grep -oE 'spawn-at-startup "[^"]+"|spawn "[^"]+"' /etc/niri/config.kdl 2>/dev/null \
+            | sed 's/spawn-at-startup "//; s/spawn "//; s/"$//' | sort -u); do
+  case "$_c" in
+    -*|"") continue ;;
+  esac
+  if [ -x "$_c" ] || command -v "$_c" >/dev/null 2>&1; then :; else
+    missing_spawn="$missing_spawn $_c"
+  fi
+done
+if [ -z "$missing_spawn" ]; then
+  pass "every command the niri config spawns exists"
+else
+  fail "niri config spawns missing command(s):$missing_spawn"
+fi
+# GREETD IS LOGIN-CRITICAL AND THIS CHECK USED TO BE TOO SHALLOW.
+#
+# It asserted only that /etc/greetd/config.toml mentions tuigreet. It did NOT
+# check that the command the config actually EXECUTES exists. On 2026-08-26 that
+# gap shipped a real defect to real hardware: the config was copied from the
+# laptop image, it invokes /usr/bin/kb3lyb-greeter, and that script was never
+# copied across. The build was green, every other postcondition passed, and the
+# installed machine booted to:
+#
+#     /bin/sh: line 1: /usr/bin/kb3lyb-greeter: No such file or directory
+#
+# with no way to log in graphically. Asserting a config's CONTENT while ignoring
+# the binary it POINTS AT is precisely the class of bug this file exists to catch.
+#
+# So: parse the command out of the config and verify it is executable.
 assert_file_has "greetd configured as the display manager" \
   /etc/greetd/config.toml 'tuigreet'
+GREET_CMD=$(sed -n 's/^[[:space:]]*command[[:space:]]*=[[:space:]]*"\([^ "]*\).*/\1/p' \
+  /etc/greetd/config.toml | head -1)
+if [ -n "$GREET_CMD" ] && { [ -x "$GREET_CMD" ] || command -v "$GREET_CMD" >/dev/null 2>&1; }; then
+  pass "greetd's session command exists and is executable ($GREET_CMD)"
+else
+  fail "greetd command '$GREET_CMD' is MISSING — the machine will not reach a login screen"
+fi
+assert "tuigreet binary present (the greeter wrapper execs it)" \
+  command -v tuigreet
 assert "Symbols Nerd Font installed for waybar" \
   sh -c 'ls /usr/share/fonts/nerd-fonts/*Symbols* >/dev/null 2>&1 || fc-list 2>/dev/null | grep -qi "symbols nerd font"'
 
