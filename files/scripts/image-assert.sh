@@ -127,6 +127,17 @@ for bin in wsjtx js8call fldigi flrig flmsg flamp qsstv direwolf xastir \
   assert "ham binary present: $bin" command -v "$bin"
 done
 
+# --- Nextcloud is mounted, not synced ----------------------------------------
+# gvfs alone makes davs:// browsable in Thunar but reachable ONLY by GTK apps.
+# Every ham GUI here is Qt/FLTK/wx/Java, so without gvfs-fuse projecting the mount
+# into /run/user/$UID/gvfs none of them can open a file from Nextcloud — and that
+# failure looks like "the file picker is empty", not like a missing package.
+assert "gvfs-fuse installed (else GVFS mounts are invisible to non-GTK apps)" \
+  rpm -q --quiet gvfs-fuse
+assert "gvfs WebDAV backend present" test -x /usr/libexec/gvfsd-dav
+assert "rclone present (the mount path that needs no GVFS at all)" \
+  command -v rclone
+
 # --- Session -----------------------------------------------------------------
 assert "niri installed"                          rpm -q --quiet niri
 # Not optional on this machine: fldigi is FLTK/X11 and chirp+wx is wxPython.

@@ -240,6 +240,40 @@ pipx install not1mm              # contest logger (DESIGN §5)
 GridTracker2 is also a `$HOME` install — it is used daily on the Windows box and
 is *not* in this image by design.
 
+### 6.6b Mount Nextcloud (do not sync it)
+
+The Windows install this replaces already used online-only placeholders: the tree
+reports ~88 GB but almost none of it was on disk (Windows showed 60 GB used of
+238 GB total). Cloning it here would be 88 GB against a 238 GB drive that also
+holds two rpm-ostree deployments. So: mount.
+
+Two ways, both already in the image.
+
+**rclone** — gives a real FUSE path immediately, works for every app:
+
+```bash
+rclone config          # new remote, type: webdav
+                       # url: https://<your-nextcloud>/remote.php/dav/files/<user>/
+                       # use a Nextcloud app password, not your account password
+mkdir -p ~/Nextcloud
+rclone mount nc: ~/Nextcloud --vfs-cache-mode writes --daemon
+```
+
+Make it persistent with a user unit in dotfiles (the credentials belong there,
+not in this image).
+
+**GVFS** — `davs://` in Thunar, no config needed. WebDAV is built into the base
+`gvfs` (`gvfsd-dav`), so this works out of the box.
+
+> [!IMPORTANT]
+> GVFS alone is not enough for the ham apps. Without **`gvfs-fuse`** a GVFS mount
+> lives only inside GIO's URI namespace — Thunar sees it, and nothing else does.
+> WSJT-X is Qt, fldigi is FLTK, CHIRP is wxPython, sdrtrunk is Java; none of them
+> would find a file on it, and the symptom is an empty file picker rather than an
+> error naming the cause. `gvfs-fuse` projects the mount into
+> `/run/user/$UID/gvfs/...` as a real path. It is in the recipe for this reason —
+> do not drop it as redundant with `gvfs`.
+
 ### 6.7 Restore the logs
 
 Backed up to `~/src/kb3lyb-backup-20260825/`:

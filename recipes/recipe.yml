@@ -169,8 +169,22 @@ modules:
         - jq
         - NetworkManager-tui
         - restic
+        # rclone + fuse3: the way Nextcloud gets MOUNTED on this machine rather
+        # than synced. The Windows install it replaces already used online-only
+        # placeholders, and the full tree is ~88 GB against a 238 GB disk, so a
+        # real sync was never the plan. `rclone mount` gives a genuine FUSE path
+        # that every app can open.
         - rclone
         - fuse3
+        # gvfs-fuse — NOT redundant with the above, and its absence is a subtle
+        # trap. The base ships gvfs with WebDAV support built in (gvfsd-dav,
+        # dav.mount), so Thunar can open davs:// out of the box. But WITHOUT
+        # gvfs-fuse a GVFS mount exists only inside GIO's URI namespace: GTK apps
+        # can reach it and nothing else can. WSJT-X is Qt, fldigi is FLTK, CHIRP
+        # is wxPython, sdrtrunk is Java — none of them would see it. gvfs-fuse
+        # projects the mount into /run/user/$UID/gvfs as a real path so every one
+        # of them can open a file from Nextcloud.
+        - gvfs-fuse
         - stow                              # dotfiles deploy
         - zsh                               # login shell the dotfiles target
         - git
