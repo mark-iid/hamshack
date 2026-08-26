@@ -12,7 +12,10 @@
 #   * AFTER the `files` module, which is what installs the pin file this reads.
 #   * AFTER every dnf module, so all the packages that create these groups have
 #     already run their sysusers scriptlets.
-#   * BEFORE kismet-suid-scope.sh, which chgrps to `kismet` by name — it has to
+#   * (The laptop image also runs kismet-suid-scope.sh, which chgrps to `kismet`
+#     by name. That script is not in this image — kismet is a wireless tool and
+#     this is a wired desktop — but the ordering rule stands for anything that
+#     resolves a group by name. It has to
 #     resolve to the pinned number, not the one the container happened to pick.
 #
 # It hard-fails rather than no-ops if the pin file is missing, for the same reason

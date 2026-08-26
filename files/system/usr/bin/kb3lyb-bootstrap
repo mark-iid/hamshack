@@ -5,7 +5,7 @@
 #
 #   1. clone the public dotfiles repo over HTTPS (anonymous — no token needed)
 #   2. stow every package into $HOME
-#   3. install $HOME tooling: Homebrew, its Brewfile, SDKMAN, JetBrains Toolbox
+#   3. install $HOME tooling: Homebrew and its Brewfile
 #
 # Nothing here needs root, and nothing is secret: the dotfiles repo is public
 # (secrets never live in it — see its .gitignore), so the clone is anonymous. On
@@ -88,37 +88,16 @@ if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
   fi
 fi
 
-# SDKMAN (Java for SailPoint IIQ — DESIGN §2), installs to ~/.sdkman
-if [[ ! -s "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
-  say "installing SDKMAN"
-  curl -fsSL "https://get.sdkman.io?rcupdate=false" | bash || warn "SDKMAN install failed"
-fi
-
-# JetBrains Toolbox (self-updating, in $HOME — DESIGN §2). Since 3.x it ships as a
-# BUNDLE (bin/jetbrains-toolbox + bin/lib/), not a single binary, and the binary
-# sits at bin/ inside a versioned top dir. So extract the whole tree to a stable
-# path (strip the top dir) and run it from there — copying just the binary, or
-# `find -maxdepth 2`, silently failed on 3.x and left Toolbox uninstalled.
-TBX_HOME="$HOME/.local/share/JetBrains/Toolbox-app"
-if [[ ! -x "$TBX_HOME/bin/jetbrains-toolbox" ]]; then
-  say "installing JetBrains Toolbox"
-  tmp="$(mktemp -d)"
-  if curl -fsSL "https://data.services.jetbrains.com/products/download?platform=linux&code=TBA" -o "$tmp/toolbox.tar.gz"; then
-    mkdir -p "$TBX_HOME"
-    tar -xzf "$tmp/toolbox.tar.gz" -C "$TBX_HOME" --strip-components=1
-    if [[ -x "$TBX_HOME/bin/jetbrains-toolbox" ]]; then
-      mkdir -p "$HOME/.local/bin"
-      ln -sf "$TBX_HOME/bin/jetbrains-toolbox" "$HOME/.local/bin/jetbrains-toolbox"
-      setsid "$TBX_HOME/bin/jetbrains-toolbox" >/dev/null 2>&1 </dev/null &
-      say "JetBrains Toolbox launched; complete sign-in from its window (Super+D → JetBrains Toolbox)."
-    else
-      warn "JetBrains Toolbox binary not found after extract"
-    fi
-  else
-    warn "JetBrains Toolbox download failed"
-  fi
-  rm -rf "$tmp"
-fi
+# NOT INSTALLED ON THIS MACHINE, unlike the kb3lyb-sway laptop bootstrap this was
+# forked from:
+#
+#   SDKMAN            a Java/Kotlin toolchain manager, there for SailPoint IIQ
+#                     work. Nothing on a shack PC needs it — note in particular
+#                     that sdrtrunk ships its OWN bundled JRE, so it does not.
+#   JetBrains Toolbox explicitly not wanted here.
+#
+# Both are removed outright rather than hidden behind a flag, because a flag that
+# defaults to "on" is how they come back.
 
 # Discord is NOT installed here any more — it is a system flatpak (recipe.yml).
 #
@@ -134,21 +113,12 @@ fi
 # manual step (SETUP §6); doing it automatically here would delete a running
 # app's data out from under the user.
 
-# --- 4. voice toolbox ----------------------------------------------------------
-# Provision the `voice` toolbox behind the voice tooling (Mod+T dictation,
-# Mod+Shift+T niri command mode): whisper.cpp + vosk and their models, built in a
-# container so the heavy STT engines stay out of the image (only wtype is baked).
-# voice-setup is a stowed dotfiles script (bin package, linked in step 2) and is
-# idempotent. Non-fatal and referenced by absolute path (it may not be on PATH
-# yet): it needs network and compiles whisper.cpp (a few minutes), so a failure
-# here must not block the rest of bootstrap — just re-run voice-setup.
-VOICE_SETUP="$HOME/.local/bin/voice-setup"
-if [[ -x "$VOICE_SETUP" ]]; then
-  say "provisioning the voice toolbox (whisper.cpp + vosk; builds in a container, may take a few minutes)"
-  "$VOICE_SETUP" || warn "voice-setup failed (network? build?) — re-run later: voice-setup"
-else
-  warn "voice-setup not found (dotfiles not stowed?); skipping voice toolbox"
-fi
+# --- 4. voice toolbox (NOT provisioned here) ------------------------------------
+# The laptop provisions a `voice` toolbox (whisper.cpp + vosk) for Mod+T dictation.
+# Skipped on this machine: it compiles whisper.cpp in a container, which takes
+# several minutes of every bootstrap, and dictation is not part of operating a
+# radio. If it is ever wanted, the dotfiles script still exists — just run
+# `voice-setup` by hand.
 
 # --- 5. login shell ------------------------------------------------------------
 # The dotfiles target zsh (.zshrc). Make it the login shell so a fresh user lands

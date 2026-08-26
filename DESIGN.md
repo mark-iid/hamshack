@@ -76,6 +76,37 @@ machine's own `modinfo ftdi_sio`.
    cosign-signed at the end of the build; an unpinned fetch makes that signature
    attest to something nobody reviewed.
 
+### What this machine carries that the laptop does, and what it drops
+
+The starting point is "the same setup as the laptop" — Evolution, the Flatpak app
+set, VS Code, the dev toolchain, ghostty, dotfiles. That is deliberate: this is a
+daily driver that also runs the shack, not an appliance. The divergences were
+chosen one at a time on 2026-08-25 rather than by trimming to taste:
+
+| Dropped | Why |
+|---|---|
+| `kismet` | A wireless survey tool on a wired desktop. It also dragged in a setuid-scoping script that **hard-fails when kismet is absent**, so that script is removed from this repo rather than left to break a future build. |
+| `fr.handbrake.ghb` | Not wanted here. |
+| `org.gnome.Boxes` | Install by hand if a Windows VM is ever needed for N1MM or an RT Systems programmer. No reason to carry it on every build until that day. |
+| SDKMAN (bootstrap) | A Java toolchain manager, present on the laptop for SailPoint IIQ work. Nothing here needs it — note that sdrtrunk ships its **own** bundled JRE. |
+| JetBrains Toolbox (bootstrap) | Explicitly not wanted. |
+| voice toolbox (bootstrap) | Compiles whisper.cpp in a container on every bootstrap, for dictation that has nothing to do with operating a radio. `voice-setup` still exists in dotfiles if it is ever wanted. |
+
+Kept on purpose, where the reasoning is not obvious:
+
+- **Homebrew and its Brewfile.** Removing it was considered and rejected — the
+  dotfiles `.zshrc` sources its shell plugins from brew, so dropping it would have
+  broken the shell before it saved anything worth having.
+- **`org.audacityteam.Audacity`.** It earns its place on a ham machine: recording
+  off the rig, filtering, and inspecting WAVs.
+- **VS Code and the C/C++ toolchain** (~1.6 GB together). The toolchain is not
+  purely developer comfort — `pipx install not1mm` can need a compiler to build a
+  wheel, and that failure is obscure when it happens.
+- **`org.gimp.GIMP`**, **Slack/Teams/Zoom**, **Bruno**.
+
+The removals are deliberate rather than flagged. A flag that defaults to "on" is
+how these things come back.
+
 ---
 
 ## 3. niri, tuned for software that hates tiling

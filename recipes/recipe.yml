@@ -142,7 +142,10 @@ modules:
         - openconnect
         - NetworkManager-openconnect-gnome
         - iperf3
-        - kismet
+        # kismet is deliberately NOT here. It is a wireless survey tool and this
+        # is a wired desktop with no wifi. It also brought real complexity: a
+        # setuid-scoping script that HARD-FAILS when kismet is absent, so that
+        # script is removed from this repo too rather than left to break a build.
         - mtr
         - fping
         - bmon
@@ -224,9 +227,12 @@ modules:
           - org.remmina.Remmina
           - org.gimp.GIMP
           - org.audacityteam.Audacity
-          - fr.handbrake.ghb
           - com.usebruno.Bruno
-          - org.gnome.Boxes
+          # NOT installed, by decision 2026-08-25:
+          #   fr.handbrake.ghb  not wanted here
+          #   org.gnome.Boxes   install it by hand if a Windows VM is ever needed
+          #                     for N1MM or an RT Systems programmer — no reason to
+          #                     carry it on every build until then
       - scope: user
         install:
           - org.gnome.seahorse.Application
@@ -245,11 +251,6 @@ modules:
       # rtl-sdr's udev rules use GROUP="rtlsdr", which is dynamically allocated;
       # see files/system/usr/lib/sysusers.d/00-kb3lyb-gids.conf.
       - pin-gids.sh
-      # Narrow kismet's setuid-root capture helpers from world-executable to
-      # 4750 root:kismet. MUST come after the dnf module that installs kismet —
-      # the script hard-fails if kismet is absent rather than silently no-opping.
-      # Needs a per-machine follow-up: usermod -aG kismet <user>.
-      - kismet-suid-scope.sh
 
   - type: systemd
     system:

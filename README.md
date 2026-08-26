@@ -89,7 +89,8 @@ which is the worst failure shape there is. All three are asserted at build time 
 | Auth | fprintd fingerprint for sudo + lock | password only |
 | Power | AC/battery profile switching | none — it is on mains |
 | Network | Wi-Fi + Tailscale | wired + Tailscale |
-| Apps | dev tooling, Evolution, many Flatpaks | the ham stack, and not much else |
+| Apps | dev tooling, Evolution, many Flatpaks | the same, plus the ham stack, minus kismet/HandBrake/Boxes |
+| `$HOME` bootstrap | brew, SDKMAN, JetBrains Toolbox, voice toolbox | brew only |
 
 ## Installation
 
