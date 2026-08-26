@@ -292,7 +292,24 @@ this constraint, and is worth doing before install rather than after.
 
 ---
 
-## 8. Update and release model
+## 7b. A karg in the image is not a karg on the machine
+
+`/usr/lib/bootc/kargs.d/` entries are applied when a deployment transitions —
+rebase or install — not on every upgrade. Adding a karg to the image therefore
+does nothing to machines already running that image lineage, and nothing reports
+the discrepancy: the file is in `/usr/lib/bootc/kargs.d/`, `image-assert.sh`
+confirms it is there, and `/proc/cmdline` simply lacks it.
+
+Discovered 2026-08-26 with `consoleblank=1200`, and on inspection the laptop image
+had been quietly suffering the same thing: of its three kargs, only
+`amdgpu.dcdebugmask` (present at the original rebase) is on the running cmdline.
+`plymouth.enable=0` and `loglevel=3` were added later and have never applied —
+`quiet` and `rhgb`, which they exist to displace, are still on the cmdline.
+
+The build-time assertion is still worth having: it proves the image *declares* the
+karg. It cannot prove the kernel received it, because that is host state, which is
+the same boundary described in the image-assert header. The host-side step is in
+SETUP §6.0c.
 
 Inherited from the laptop image, unchanged:
 

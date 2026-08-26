@@ -164,6 +164,37 @@ It is recorded here because a permanently-failed unit is exactly the kind of
 thing that looks like the cause when some unrelated problem turns up months
 later. It is not.
 
+### 6.0c Adding a karg to the image does NOT apply it to a running machine
+
+`/usr/lib/bootc/kargs.d/` is applied when a deployment **transitions** — a rebase,
+or the initial install. It is **not** re-evaluated on every `rpm-ostree upgrade`.
+So a karg added to the image after this machine was already on that image lineage
+silently never takes effect: the file is present in `/usr/lib/bootc/kargs.d/`, the
+build asserts it, and `/proc/cmdline` does not have it.
+
+This is not theoretical. `consoleblank=1200` was added, the image shipped it, the
+upgrade installed it, and the running kernel never saw it. Worse, the same thing
+had already happened on the **laptop** image without anyone noticing:
+
+```
+kargs.d says: amdgpu.dcdebugmask=0x10, plymouth.enable=0, loglevel=3
+cmdline has:  amdgpu.dcdebugmask=0x10        <- applied at the original rebase
+              (quiet and rhgb still present) <- the other two never applied
+```
+
+Two of that machine's three kargs have been inert for its entire life.
+
+**So: after adding a karg to the image, apply it on each running machine too.**
+
+```bash
+sudo rpm-ostree kargs --append-if-missing=<karg>
+systemctl reboot
+tr ' ' '\n' < /proc/cmdline | grep <karg>    # verify — do not assume
+```
+
+`--append-if-missing` is idempotent, so it is safe even if a future rebase does
+apply the kargs.d entry.
+
 ### 6.1 Groups — do this first, nothing radio works without it
 
 > [!WARNING]
