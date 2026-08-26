@@ -647,6 +647,49 @@ would say whether this is DRCS25-specific or common to RT Systems' installers.
 > the programmers are known to work; there is no point hardening a path that may
 > yet be abandoned for a Windows VM.
 
+### 6.9 Pat / Winlink — VARA, ARDOP, and the shared rigctld
+
+Configured at `~/.config/pat/config.json` (mode 0600 — it holds a Winlink password).
+Station is KB3LYB / EN90xm, taken from the log rather than typed from memory.
+
+| transport | addr | native? | state |
+|---|---|---|---|
+| ARDOP | `localhost:8515` | **yes** — `ardopcf`, in the image | modem installed; not yet run |
+| VARA HF | `localhost:8300` | no — Windows, needs Wine | **not installed**, licence pending |
+| VARA FM | `localhost:8300` | no — Windows, needs Wine | **not installed** |
+
+All three point at the rig named `ft710`, which is the **shared rigctld** from §6.5,
+addressed as `127.0.0.1:4532`. Not `localhost` — see the IPv6 trap in that section.
+
+**There is no native Linux VARA.** VARA HF/FM/SAT are closed-source Windows builds;
+Wine is the only route and that is the normal, widely-used arrangement for it — a
+very different prospect from the RT Systems programmers in §6.8c, since VARA is a
+soundcard modem that talks TCP rather than a driver-adjacent app. Give it its own
+Wine prefix, separate from the RT Systems experiments, so one cannot break the other.
+
+**`ptt_ctrl` is true on all three transports**, so Pat keys the transmitter through
+rigctld when it connects. That is correct and necessary for Winlink, but it means
+Pat is a third CAT consumer alongside QLog and CATTouch — see the contention note in
+§6.5 if protocol errors appear once Pat is actually operating.
+
+Still needed before Pat can be used:
+
+1. `secure_login_password` is empty. Set it with `pat configure`.
+2. VARA, once licensed, into its own Wine prefix.
+3. Audio routing — VARA and ardopcf each need the FT-710's USB codec selected as
+   their soundcard. That is configured in VARA's own UI and in ardopcf's device
+   arguments, NOT in Pat, and it is the step most likely to be mistaken for a Pat
+   misconfiguration.
+
+`ardopcf` is started per session against a soundcard, not run as a service:
+
+```bash
+ardopcf 8515 <capture-device> <playback-device>
+```
+
+PTT stays with rigctld — do not also give ardopcf its own serial PTT, or two
+processes own the CAT port.
+
 ---
 
 ## 7. Backup checklist — BEFORE wiping

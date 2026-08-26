@@ -204,3 +204,9 @@ modules:
     scripts:
       - install-sdrtrunk.sh
       - install-pat.sh
+      # ardopcf: the NATIVE ARDOP soundcard modem for Pat/Winlink. Deliberately
+      # alongside VARA rather than instead of it — VARA is Windows-only and needs
+      # Wine, ardopcf does not, so this is the fallback that cannot break when a
+      # Wine prefix does. Packaged nowhere for Fedora; upstream ships a prebuilt
+      # x86_64 binary. See install-ardopcf.sh for the pinning rationale.
+      - install-ardopcf.sh

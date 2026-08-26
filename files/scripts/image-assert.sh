@@ -125,6 +125,13 @@ assert "sdrtrunk /opt compat symlink is a tmpfiles rule, not a build-time write"
 refute "nothing was written into /var/opt at build time" \
   test -e /var/opt/sdrtrunk
 assert "pat (Winlink) installed"                 test -x /usr/bin/pat
+# ardopcf is the NATIVE ARDOP modem — the non-Wine half of Pat's transport options.
+# The libasound assert is not redundant: ardopcf is dynamically linked against it,
+# alsa-lib comes from the BASE image rather than this recipe, and if a future base
+# drops it the failure is a loader error at operating time, not at build time.
+assert "ardopcf (ARDOP modem) installed"         test -x /usr/bin/ardopcf
+assert "libasound present (ardopcf links against it)" \
+  test -e /usr/lib64/libasound.so.2
 
 # cqrlog is deliberately absent (it drags in mariadb-server); assert that, so it
 # cannot creep back in as somebody else's dependency without anyone noticing.
