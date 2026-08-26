@@ -238,10 +238,25 @@ Listed because an image whose uncertainties are undocumented drifts silently.
    is supported by the kernel, which was the risk everyone expects; the app is the
    risk nobody checks. Wine's serial support is historically weak on control-line
    games (DTR/RTS, non-standard baud), which is what a cloning cable does.
-2. **Can CHIRP replace RT Systems outright?** CHIRP supports many Alinco and
-   Wouxun radios. If it covers the DR-CS25 and KG-UV96, the entire Wine
-   dependency — and 195 i686 packages — disappears. **Check this before investing
-   in Wine.**
+2. ~~**Can CHIRP replace RT Systems outright?**~~ **ANSWERED — NO.** Checked
+   against the installed CHIRP 0.4.0 (528 models) on 2026-08-25. Neither radio is
+   supported:
+
+   - Alinco: DJ-G7EG, DJ-G7T, DJ175, DJ596, DR03T, DR06T, DR135T, DR235T, DR435T,
+     DR735T — **no DR-CS25**
+   - Wouxun: KG-1000G(+), KG-805G, KG-816/818, KG-935G(+/H), KG-UV6, KG-UV8D(+/E/H),
+     KG-UV8H, KG-UV920P-A, KG-UV980P, KG-UV9D Plus, KG-UV9G Pro, KG-UV9GX, KG-UV9K,
+     KG-UV9PX, KG-UVD1P — **no KG-UV96**
+
+   Model names confirmed from the programmers' own DLL version resources
+   (`DR-CS25 V5.DLL`, `KG-UV96 V5.DLL`), not inferred from folder names.
+
+   So Wine is load-bearing, not a nice-to-have. One encouraging detail: the
+   programmers are **native Win32/MFC** — `RadioEngine_V5.exe` driving a per-radio
+   `.dll` + `.ddt`, linked against `mfc100u.dll` (Visual C++ 2010). MFC apps
+   historically run well under Wine. This is a materially better prospect than
+   N1MM, which is .NET over SQL Server Compact. The open risk stays the serial
+   side — control-line handling on a cloning cable — not the GUI.
 3. **Can `wine-core.i686` be dropped?** If the programmers work under plain new
    WoW64, drop it. 195 packages of multilib is a lot to carry for insurance
    nobody is claiming on.

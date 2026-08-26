@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Report which niri window-rule app-id patterns actually match a live window —
+# and, just as important, which match NOTHING.
+#
+# WHY THIS EXISTS. niri matches window rules on app-id (Wayland) or WM_CLASS
+# (X11, via xwayland-satellite). Those strings cannot be read off a package: you
+# only learn them by running the app. The rules in /etc/niri/config.kdl that open
+# the ham apps floating were therefore written from informed guesses.
+#
+# And niri does not warn about a rule that matches nothing — verified: its binary
+# contains no such diagnostic. A wrong pattern is perfectly silent. WSJT-X just
+# opens tiled with a squeezed waterfall and nothing anywhere says why.
+#
+# So: open the apps you care about, then run this. Anything reported as UNMATCHED
+# is a rule doing nothing, and any app-id listed as uncovered is a window no rule
+# claims.
+#
+#     kb3lyb-check-window-rules              # check the system config
+#     kb3lyb-check-window-rules ~/.config/niri/config.kdl
+set -uo pipefail
+
+CONFIG="${1:-}"
+if [ -z "$CONFIG" ]; then
+  for c in "$HOME/.config/niri/config.kdl" /etc/niri/config.kdl; do
+    [ -r "$c" ] && { CONFIG="$c"; break; }
+  done
+fi
+[ -r "${CONFIG:-}" ] || { echo "!! no readable niri config found" >&2; exit 1; }
+command -v niri >/dev/null || { echo "!! niri not on PATH" >&2; exit 1; }
+
+# Live app-ids. niri msg -j windows is the only source of truth here.
+mapfile -t LIVE < <(niri msg -j windows 2>/dev/null \
+  | grep -oE '"app_id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+  | sed 's/.*"app_id"[[:space:]]*:[[:space:]]*"//; s/"$//' | sort -u)
+
+if [ "${#LIVE[@]}" -eq 0 ]; then
+  echo "!! no windows open (or niri msg failed) — open the apps first, then re-run" >&2
+  exit 1
+fi
+
+echo "config: $CONFIG"
+echo "live app-ids (${#LIVE[@]}):"
+printf '   %s\n' "${LIVE[@]}"
+echo
+
+# Patterns as written in the config, in order.
+mapfile -t PATS < <(grep -oE 'match app-id=r#"[^"]+"#' "$CONFIG" \
+  | sed 's/match app-id=r#"//; s/"#$//')
+[ "${#PATS[@]}" -gt 0 ] || { echo "!! no app-id rules found in $CONFIG" >&2; exit 1; }
+
+matched_any=()
+fails=0
+echo "rules:"
+for p in "${PATS[@]}"; do
+  hits=()
+  for a in "${LIVE[@]}"; do
+    # niri uses the Rust regex crate. grep -E is close enough for these patterns,
+    # but (?i) is not POSIX — translate it to a case-insensitive grep instead of
+    # silently failing to match, which would make this tool lie in the same way
+    # the thing it is checking does.
+    pp="$p"; ci=""
+    case "$pp" in *'(?i)'*) ci="-i"; pp="${pp//(\?i)/}";; esac
+    if printf '%s\n' "$a" | grep $ci -qE "$pp"; then hits+=("$a"); fi
+  done
+  if [ "${#hits[@]}" -gt 0 ]; then
+    printf '  ok        %-42s -> %s\n' "$p" "${hits[*]}"
+    matched_any+=("${hits[@]}")
+  else
+    printf '  UNMATCHED %-42s -> nothing open matches this\n' "$p"
+    fails=$((fails+1))
+  fi
+done
+
+echo
+echo "windows no rule claims:"
+uncovered=0
+for a in "${LIVE[@]}"; do
+  found=0
+  for m in ${matched_any[@]+"${matched_any[@]}"}; do [ "$m" = "$a" ] && found=1 && break; done
+  [ "$found" -eq 0 ] && { printf '   %s\n' "$a"; uncovered=$((uncovered+1)); }
+done
+[ "$uncovered" -eq 0 ] && echo "   (none)"
+
+echo
+if [ "$fails" -gt 0 ]; then
+  echo "$fails rule(s) matched nothing. That may just mean the app is not open —"
+  echo "but if it IS open, the pattern is wrong and the rule is doing nothing."
+  exit 1
+fi
+echo "every rule matched at least one open window."

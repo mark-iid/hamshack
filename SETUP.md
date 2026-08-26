@@ -142,14 +142,36 @@ first head's actual width. Then `niri msg action reload-config`.
 
 ### 6.4 Verify the floating window rules actually fire
 
-A window rule that matches nothing is **silent** — this is how the config rots.
+A window rule that matches nothing is **completely silent** — niri emits no
+warning for an unmatched rule (checked: its binary carries no such diagnostic).
+The rule is simply inert, WSJT-X opens tiled with a squeezed waterfall, and
+nothing anywhere says why. This is the single most likely thing in this image to
+be quietly wrong, because the patterns were written from informed guesses:
+`app-id` (Wayland) and `WM_CLASS` (X11) cannot be read off a package.
+
+Open WSJT-X, fldigi, CHIRP, sdrtrunk and a Wine app, then:
 
 ```bash
-niri msg windows      # app-id + title for every open window
+kb3lyb-check-window-rules
 ```
 
-Open WSJT-X, fldigi, CHIRP, sdrtrunk and a Wine app; check each opened floating.
-Fix any `app-id` pattern that did not match.
+It lists every live `app-id`, marks each rule `ok` or `UNMATCHED`, names any
+window no rule claims, and exits nonzero if anything matched nothing. `niri msg
+windows` gives the same raw data if you prefer to read it yourself.
+
+The two patterns most likely to be wrong:
+
+- **`^(?i)wine$`** — the one that matters for the RT Systems programmers. Wine
+  sets `WM_CLASS` to two fields, e.g. `("radioengine_v5.exe", "Wine")`, and
+  whether niri's `app-id` maps to the instance name or the class name decides
+  whether this ever fires. If it maps to the instance, every RT Systems window
+  tiles.
+- **`^(?i).*sdrtrunk.*$`** — Java/Swing often reports its main class name rather
+  than the `StartupWMClass` set in the `.desktop` file that
+  `files/scripts/install-sdrtrunk.sh` writes. If this rule misses, check that
+  file before touching the rule.
+
+Fix any pattern that missed, then `niri msg action reload-config`.
 
 ### 6.5 Radios
 

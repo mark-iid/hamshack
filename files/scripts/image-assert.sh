@@ -137,6 +137,10 @@ assert "baked niri config survived the module ordering" \
   test -r /etc/niri/config.kdl
 assert_file_has "niri config carries the floating window rules for ham apps" \
   /etc/niri/config.kdl 'open-floating'
+# The rules are guesses that fail SILENTLY (niri has no unmatched-rule warning),
+# so the tool that turns that silence into output has to actually be present.
+assert "window-rule checker present (the rules fail silently without it)" \
+  test -x /usr/bin/kb3lyb-check-window-rules
 assert_file_has "greetd configured as the display manager" \
   /etc/greetd/config.toml 'tuigreet'
 assert "Symbols Nerd Font installed for waybar" \

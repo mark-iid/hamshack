@@ -170,7 +170,7 @@ window-rule {
 // Programming, logging, satellites. chirp+wx is the wxPython GUI — its WM_CLASS
 // has been seen as both "Chirp" and "chirp" across releases, hence the (?i).
 window-rule {
-    match app-id=r#"^(?i)(chirp|cqrlog|klog|tqsl|gpredict|xastir)$"#
+    match app-id=r#"^(?i)(chirp|klog|qlog|tqsl|gpredict|xastir)$"#
     open-floating true
 }
 
