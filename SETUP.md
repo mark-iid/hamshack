@@ -337,6 +337,24 @@ Verified on this machine 2026-08-26:
 `if01` is the CP2105's second interface and answered on no rate tested; on this
 rig family that port is the PTT/audio side, not CAT.
 
+**WinKeyer: `usb-FTDI_FT232R_USB_UART_AH071WD4-if00-port0`, 1200 baud.** Identified
+2026-08-26 by sending the WinKeyer Host Open command (`00 02`) and reading the
+version byte back: `0x1F` = 31, i.e. WinKeyer 3 firmware v3.1.
+
+This needs probing to establish because **both FT232Rs present identical USB
+descriptors** — `FTDI FT232R USB UART`, `0403:6001` — so only the serial number
+distinguishes them. The other one (`FTWOSJ47`) and the CH340 (`1a86:7523`) both
+stayed silent, so neither speaks the WinKeyer protocol; they remain unidentified.
+
+Do not conclude anything from `<WK_K3NGsketch>` in a backed-up `fldigi_def.xml`.
+That line reads "Mortty loaded with K3NG WinKeyer emulator sketch", which looks
+like a statement about this station but is fldigi's stock description of the
+option — the value here is 0.
+
+To re-probe safely, drop DTR/RTS on open: on a bare keying interface those lines
+are key and PTT. `scratchpad`-style throwaway is fine; the sequence is host-open
+`00 02`, read one byte, then host-close `00 03`.
+
 ```bash
 ls -l /dev/serial/by-id/     # stable names — use these, not /dev/ttyUSB0
 rtl_test -t                  # SDR dongle
