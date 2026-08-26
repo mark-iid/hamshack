@@ -632,7 +632,27 @@ Things already ruled out, so nobody repeats them:
   win64 prefix into the win32 one, and removing it again, changed nothing.
 - Not the GUI/toolkit — the MFC dialogs render and respond correctly.
 
-**Recommendation: stop tuning Wine here.** This is the case §9 and the recipe
+**Retried 2026-08-26 after VARA succeeded, applying what worked there:** a fresh
+win64 prefix (`~/.local/share/wineprefixes/rtnew`) in **winxp mode** with `vcrun2010`
+and ALSA. In that prefix the installer no longer crashes or silently exits — it
+starts and WAITS for input. That is better than both earlier prefixes, so XP mode
+appears to matter.
+
+It cannot be finished unattended, though. The installer has **no silent mode**:
+`/S` exits doing nothing, and `/silent`, `/VERYSILENT` and `/q` all just show the
+wizard and wait. Unlike VARA's Inno Setup, there is no flag to bypass the GUI, and
+the payload is a proprietary self-extractor that `7z` cannot unpack to reach an
+inner installer. Driving the wizard programmatically does not work either —
+`wtype`'s virtual-keyboard events never reach XWayland clients under niri.
+
+**So the remaining step is a human clicking through the wizard in the `rtnew`
+prefix.** That is a few minutes of work, not an unsolved problem:
+
+```bash
+WINEPREFIX=~/.local/share/wineprefixes/rtnew wine ~/Downloads/DRCS25_Setup.exe
+```
+
+**If that still fails, stop tuning Wine here.** This is the case §9 and the recipe
 comment both describe — the honest answer is a small Windows VM with USB
 passthrough (`org.gnome.Boxes`, deliberately not baked). An untried data point that
 costs little: run `KGUV96_Setup.exe` and see whether it fails the same way, which
@@ -661,11 +681,44 @@ Station is KB3LYB / EN90xm, taken from the log rather than typed from memory.
 All three point at the rig named `ft710`, which is the **shared rigctld** from §6.5,
 addressed as `127.0.0.1:4532`. Not `localhost` — see the IPv6 trap in that section.
 
-**There is no native Linux VARA.** VARA HF/FM/SAT are closed-source Windows builds;
-Wine is the only route and that is the normal, widely-used arrangement for it — a
-very different prospect from the RT Systems programmers in §6.8c, since VARA is a
-soundcard modem that talks TCP rather than a driver-adjacent app. Give it its own
-Wine prefix, separate from the RT Systems experiments, so one cannot break the other.
+**There is no native Linux VARA** — closed-source Windows only. Wine is the route,
+and it WORKS. Installed and verified 2026-08-26: VARA HF v4.9.0 running, UI drawing,
+status `2300 LISTEN`, listening on TCP 8300/8301.
+
+#### The VARA recipe that actually works
+
+```bash
+export WINEPREFIX=~/.local/share/wineprefixes/winlink64   # NO WINEARCH
+wine wineboot -u
+winetricks -q winxp sound=alsa vb6run vcrun2015 dotnet35sp1   # dotnet is the slow one
+cd "$WINEPREFIX/drive_c" && wine ~/Downloads/'VARA setup (Run as Administrator).exe' \
+    /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+wine "$WINEPREFIX/drive_c/VARA/VARA.exe"
+```
+
+Two things that cost hours and are worth internalising:
+
+1. **Do NOT use `WINEARCH=win32`.** Pat's wiki says to, and that advice predates
+   new-WoW64. Fedora's Wine runs 32-bit Windows apps in an ORDINARY 64-bit prefix;
+   asking for win32 fails with a misleading *"not supported in wow64 mode"*. A plain
+   default prefix is correct, and VARA installed more cleanly in it (rc=0) than in
+   the win32 prefix that was built to accommodate the wiki. **VARA does not need
+   `wine-core.i686` at all** — see the note in §6.8c about whether that package
+   still earns its 1.8 GB.
+2. **VARA's installer is Inno Setup, so it installs silently.** `/VERYSILENT
+   /SUPPRESSMSGBOXES /NORESTART` needs no GUI at all. Attempting to drive the wizard
+   with `wtype` is a dead end — virtual-keyboard events do not reach XWayland clients
+   under niri, so no keystroke ever lands.
+
+> [!WARNING]
+> **VARA binds `0.0.0.0:8300` and `0.0.0.0:8301`, not loopback**, and has no
+> authentication of any kind. On this machine that exposes it on the LAN
+> (192.168.x) and over Tailscale. Pat only ever needs `localhost`. VARA has no
+> bind-address setting, so containing it means a firewall rule — unlike rigctld,
+> which takes `-T 127.0.0.1` (§6.5).
+
+Give VARA its own prefix, separate from the RT Systems experiments, so a broken
+prefix cannot take the working modem down with it.
 
 **`ptt_ctrl` is true on all three transports**, so Pat keys the transmitter through
 rigctld when it connects. That is correct and necessary for Winlink, but it means
