@@ -230,6 +230,12 @@ assert "Symbols Nerd Font installed for waybar" \
 refute "pam_fprintd not wired into the PAM stack (no reader on this machine)" \
   grep -rqs pam_fprintd /etc/pam.d/
 
+# --- Kernel arguments --------------------------------------------------------
+# consoleblank is the only karg this image sets, and it is easy to lose in a
+# refactor because nothing else references it.
+assert_file_has "console blanking karg present (greeter would otherwise sit lit)" \
+  /usr/lib/bootc/kargs.d/00-kb3lyb.toml 'consoleblank=1200'
+
 # --- Update strategy ---------------------------------------------------------
 assert_file_has "rpm-ostreed stages updates rather than applying them" \
   /etc/rpm-ostreed.conf '^AutomaticUpdatePolicy=stage'

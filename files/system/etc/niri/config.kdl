@@ -20,32 +20,29 @@ input {
     focus-follows-mouse
 }
 
-// DISPLAYS — MULTI-HEAD, 1x, AND THE CONNECTOR NAMES ARE PLACEHOLDERS.
+// DISPLAYS — real connector names, read off the machine 2026-08-26.
 //
-// The EliteDesk 800 G4 Mini has two DisplayPort outputs and one HDMI. Which
-// connector names the kernel hands out (DP-1/DP-2/HDMI-A-1, and whether DP shows
-// up as DP-N or DP-N-M) depends on the actual cabling, so the names below CANNOT
-// be verified from here. On first boot, run:
+// These were placeholders (DP-1/DP-2) until the machine existed. The actual
+// connectors are DP-3 and HDMI-A-1; the other four DP/HDMI connectors the i915
+// exposes are disconnected. Confirm after any cable change with:
 //
 //     niri msg outputs
 //
-// and correct these blocks. Until then niri falls back to auto-arranging the
-// heads left-to-right in enumeration order, which works but is not deterministic
-// across reboots — the reason the explicit positions exist at all.
+// HDMI-A-1 is the larger panel and sits at the origin; DP-3 is placed to its
+// right at x=1920, which is HDMI-A-1's width. If the physical arrangement is the
+// other way round, swap the two `position` lines — nothing else needs to change.
 //
 // scale 1 throughout, unlike the laptop's 1.35. These are ordinary ~96 DPI desk
-// monitors, and — more to the point — most of this image's GUI is Xwayland
-// (fldigi is FLTK, chirp+wx is wxPython). Fractional scale on Xwayland gets you
-// blurry upscaled bitmaps, so 1x is not a compromise here, it is correct.
-output "DP-1" {
+// monitors, and most of this image's GUI is Xwayland (fldigi is FLTK, chirp+wx is
+// wxPython). Fractional scale on Xwayland gets you blurry upscaled bitmaps, so 1x
+// is not a compromise here, it is correct.
+output "HDMI-A-1" {
     scale 1
     position x=0 y=0
 }
 
-output "DP-2" {
+output "DP-3" {
     scale 1
-    // x must equal DP-1's width for the heads to sit edge to edge. 1920 assumes
-    // 1080p; fix alongside the connector names above.
     position x=1920 y=0
 }
 

@@ -1,0 +1,33 @@
+# kb3lyb-shack kernel arguments.
+#
+# consoleblank=1200 — blank the VT after 20 minutes idle, which powers the
+#   monitors down via DPMS.
+#
+#   This machine sits at the greeter for long stretches: it is a shack PC that
+#   gets woken for an operating session and left otherwise. Fedora ships
+#   consoleblank=0 (blanking disabled), so without this the login screen stays
+#   lit indefinitely — wasted power, and a static high-contrast layout parked on
+#   the panels for hours at a time.
+#
+#   It applies to the CONSOLE only, which is exactly the gap that needed filling.
+#   Once you log in, niri owns the displays and idle behaviour comes from
+#   swayidle in the dotfiles instead. The two do not overlap or fight.
+#
+#   Verified on the machine that both connected outputs (HDMI-A-1, DP-3) report
+#   DPMS support, so this genuinely powers them down rather than just painting
+#   the console black.
+#
+# NOT set here, deliberately:
+#   * amdgpu.dcdebugmask — the laptop's PSR workaround. Wrong vendor entirely;
+#     this is Intel HD Graphics 530.
+#   * video=<connector>:d — considered for keeping the greeter off the second
+#     monitor and REJECTED. It stops the console appearing there, but disables
+#     the connector outright, so niri loses the monitor too. The console clones
+#     to every connected output and that is a kernel fbdev behaviour greetd
+#     cannot influence; the only real fix is a Wayland greeter.
+#   * the systemd-remount-fs mask — that unit's failure is expected on bootc and
+#     harmless (SETUP §6.0b). Masking it would hide a real failure later.
+
+kargs = [
+    "consoleblank=1200",
+]
