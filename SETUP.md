@@ -145,6 +145,25 @@ rpm-ostree status        # origin must name ghcr.io, NOT localhost
 This step is only needed for an ISO install. A machine rebased from an existing
 Fedora Atomic install already points at the registry.
 
+### 6.0b `systemd-remount-fs.service` fails on every boot. Ignore it.
+
+`systemctl --failed` will always show:
+
+```
+● systemd-remount-fs.service  ... Remount Root and Kernel File Systems
+  mount: /: fsconfig() failed: overlay: No changes allowed in reconfigure.
+```
+
+This is cosmetic and expected on bootc. `/` is a **composefs overlay**, already
+read-only by design, and overlayfs does not support reconfigure — so the unit's
+attempt to apply fstab's `ro` option to `/` cannot succeed and never could.
+Nothing is wrong: `/boot`, `/var` and `/home` all mount normally and `/var` and
+`/home` are writable.
+
+It is recorded here because a permanently-failed unit is exactly the kind of
+thing that looks like the cause when some unrelated problem turns up months
+later. It is not.
+
 ### 6.1 Groups — do this first, nothing radio works without it
 
 > [!WARNING]
