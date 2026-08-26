@@ -393,6 +393,23 @@ Point every client at **Hamlib NET rigctl — model 2 — `127.0.0.1:4532`**:
 Do **not** also give these apps the raw `/dev/serial/by-id/...` path. That is the
 configuration mistake this whole arrangement exists to prevent.
 
+> [!IMPORTANT]
+> **Use `127.0.0.1`, never `localhost`.** The unit binds `-T 127.0.0.1`, IPv4 only,
+> and `localhost` resolves to `::1` first on this machine — so a client configured
+> with `localhost` gets connection-refused. QLog surfaces that as a downstream
+> *"Get Mode Error / Protocol error"* rather than a connect failure, which sends you
+> looking in entirely the wrong place. Confirmed 2026-08-26.
+
+**The FT-710's CAT processor is shared, and it saturates.** CATTouch is a second
+CAT consumer on this rig, and the '710 starves under the combined load — the
+symptom is intermittent hamlib protocol errors in whichever client loses the race,
+not a clean failure. So keep the software side's CAT traffic modest: QLog shipped
+defaults of a 500 ms poll asking for frequency, mode, VFO, RF power, split *and* CW
+key speed, which is far more than this rig wants alongside CATTouch. It is set to
+1000 ms polling frequency and mode only. Re-enable the other reads one at a time if
+you want them, and treat returning protocol errors as the budget being exceeded
+rather than as a broken command.
+
 The unit carries `--set-conf=dtr_state=OFF,rts_state=OFF`. Per the CAUTION above
 that is a safety setting, not tuning — and rigctld holds the port open the entire
 time it runs. It also binds `-T 127.0.0.1`: rigctld has no authentication of any
