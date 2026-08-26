@@ -182,14 +182,64 @@ is *not* in this image by design.
 
 ### 6.7 Restore the logs
 
-Backed up to `~/src/kb3lyb-backup-20260825/` (and in Nextcloud):
+Backed up to `~/src/kb3lyb-backup-20260825/`:
 
-- `log4om/Log4OM_ADIF_20260826005047.adi` — 5,804 QSOs → import into **QLog**
-- `wsjtx/` → `~/.local/share/WSJT-X/`
-- `fldigi/fldigi.files`, `fldigi/NBEMS.files` → `~/`
-- `rtsystems/` → the two `.dat` files, if Wine works out
+| From | To | Notes |
+|---|---|---|
+| `log4om/Log4OM_ADIF_20260826005047.adi` | import into **QLog** | 5,804 QSOs — the authoritative log |
+| `wsjtx/wsjtx_log.digital.adi` | rename to `wsjtx_log.adi` in `~/.local/share/WSJT-X/` | digital-only; **do not import into QLog** — see below |
+| `wsjtx/wsjtx_log.adi` | keep as the untouched original | superseded by the digital-only file |
+| `wsjtx/WSJT-X.ini`, `ALL.TXT` | `~/.local/share/WSJT-X/` | |
+| `kb3lyb-shack-backup.tar.gz` | unpack as needed | Log4OM SQLite, N1MM, HRD, GridTracker, JTAlert, RT Systems |
+| `kb3lyb-winlink.tar.gz` | reference only | Winlink Express is Windows; Pat replaces it |
 
 CHIRP `.img` files already sync via Nextcloud.
+
+#### IMPORT THE LOG4OM ADIF ONLY. Do not also import wsjtx_log.adi.
+
+Analysed 2026-08-25, before anyone had a chance to merge them by hand:
+
+- The Log4OM export is **already deduplicated** — zero same call+band+date repeats.
+  Its only five near-duplicates are rovers (`K8RYU/R`, `K3ARL/R`) worked twice on
+  different frequencies hours apart. Real QSOs. Do not "clean" them.
+- `wsjtx_log.adi` holds 8,584 records with **2,745 same call+band+date repeats** —
+  FT8 retry spam. `A71UN` on 17m appears **30 times in one day**; Log4OM kept one.
+- Exactly **2** FT8 QSOs exist in the WSJT-X file and not in Log4OM. Neither is
+  confirmed.
+- That file also contains 1,186 SSB QSOs, which WSJT-X cannot make — so it is not
+  a pure WSJT-X log; something merged the full log back into it, which is also why
+  it carries LoTW/eQSL flags.
+
+Importing both would inject ~2,780 duplicates that Log4OM already rejected, in
+pairs where one side carries confirmations and the other does not — the exact
+situation in which a careless dedup destroys LoTW/eQSL status. The safe move is
+not to create it.
+
+`wsjtx_log.adi` still belongs on the machine: WSJT-X and JTAlert read it purely to
+colour-code previously-worked callsigns. It is a display cache, not a log of
+record. Copy it into place and otherwise ignore it.
+
+#### Use the digital-only variant
+
+`wsjtx_log.digital.adi` is that file with the 1,321 non-digital records removed
+(1,186 SSB, 113 CW, and a few RTTY/FM/PSK/AM/SSTV), leaving 7,263 FT8 + MFSK.
+FT8 count is preserved exactly: 6,394 in, 6,394 out.
+
+The point is what it changes on screen. **921 callsigns had only ever been worked
+on SSB or CW.** With those records in the file, WSJT-X paints those stations as
+"worked before" and you skip a call you have never actually worked on a digital
+mode. Removing them costs the "already have it" hint for just **4 DXCC entities
+and 30 grids** — a lopsided trade.
+
+Whether it matters at all depends on WSJT-X's *Settings → Colors* rules on this
+machine, which decide if the worked-before test considers mode. That cannot be
+read reliably out of `WSJT-X.ini` (it is a serialised Qt variant blob), so check
+it in the UI. If the test ignores mode, the digital-only file is the one you want.
+
+It was produced by slicing records out of the source text between `<eor>` markers
+rather than by parsing and re-emitting fields — a re-serialising filter would
+silently drop any field the parser mishandled. The original is kept unmodified
+alongside it.
 
 ---
 

@@ -278,5 +278,18 @@ Already pulled to `~/src/kb3lyb-backup-20260825/`:
 
 CHIRP `.img` files already live in Nextcloud and need no separate backup.
 
-Still to capture before wiping: Log4OM's SQLite databases, N1MM's database, HRD's
-logbook, and JTAlert/GridTracker settings — see SETUP §7.
+Also captured (2026-08-25), as two archives:
+
+- `kb3lyb-shack-backup.tar.gz` (228 MB) — Log4OM SQLite incl. `Log4OMNG.SQLite`,
+  HRD, N1MM, GridTracker2, JTAlert, CHIRP appdata, MSHV, Win4YaesuSuite,
+  Affirmatech/N3FJP, RT Systems, Desktop, `.ssh`
+- `kb3lyb-winlink.tar.gz` (63 MB) — `C:\RMS Express`
+
+Caches (`Cache/`, `GPUCache/`, Log4OM's `temp/`) were excluded — regenerable, and
+Log4OM's `temp/EN.dat` alone is 214 MB.
+
+**The logs need no deduplication.** The Log4OM export is already clean; the
+apparent duplication lives in `wsjtx_log.adi`, which is a display cache for
+worked-before highlighting rather than a log of record. See SETUP §6.7 — that
+section exists specifically to stop a future attempt at "tidying" the logs from
+destroying LoTW/eQSL confirmations.
