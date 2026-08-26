@@ -107,6 +107,44 @@ before installing**, so the installer can lay out both drives in one pass.
 The image ships defaults; these depend on the operator or the hardware and must be
 done once on the machine.
 
+### 6.0 Re-point the machine at the registry. DO THIS FIRST.
+
+**An install from the ISO cannot update itself until you do.** The installer's
+kickstart ends with:
+
+```
+bootc switch --mutate-in-place --transport registry localhost/kb3lyb-shack:44
+```
+
+so the freshly installed system's origin is **`localhost/kb3lyb-shack:44`** — a
+ref that exists in no registry. `rpm-ostree upgrade` and
+`rpm-ostreed-automatic.timer` will therefore fail on every attempt, and the
+machine sits on the ISO's image forever. Nothing about the desktop looks wrong;
+it just silently stops receiving updates. (`kb3lyb-image-age.timer` is the
+backstop that eventually complains — but it should never get the chance.)
+
+Two steps, because the first is what installs the signing policy that lets the
+second be verified:
+
+```bash
+# 1. unsigned first — this pulls in the cosign key + policy
+sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/mark-iid/kb3lyb-shack:latest
+systemctl reboot
+
+# 2. then the signed image, which is what you actually want to run
+sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mark-iid/kb3lyb-shack:latest
+systemctl reboot
+```
+
+Confirm it took:
+
+```bash
+rpm-ostree status        # origin must name ghcr.io, NOT localhost
+```
+
+This step is only needed for an ISO install. A machine rebased from an existing
+Fedora Atomic install already points at the registry.
+
 ### 6.1 Groups — do this first, nothing radio works without it
 
 ```bash
