@@ -246,16 +246,32 @@ vainfo | head
 If this says something else, re-read `recipes/common/codecs.yml` — the free/nonfree
 split is the usual cause.
 
-### 6.3 Fix the display layout
+### 6.3 Display layout — done; re-check only after a cable or monitor change
 
-The connector names in `/etc/niri/config.kdl` are **placeholders**.
+No longer placeholders. This machine has **HDMI-A-1** (Lenovo T2224pD, 1920x1080)
+and **DP-3** (ViewSonic VA2037, 1600x900); the other four DP/HDMI connectors the
+i915 exposes are disconnected. HDMI-A-1 is the primary and sits at the origin,
+DP-3 is to its **left** at `x=-1600`, both top-aligned at `y=0`.
 
 ```bash
-niri msg outputs      # real connector names + modes
+niri msg outputs      # connector names, modes, and logical positions
 ```
 
-Correct the `output` blocks, and the `position x=` of the second head to match the
-first head's actual width. Then `niri msg action reload-config`.
+A left-hand monitor's `x` is minus **its own** width — that is what lands its
+right edge on the primary's left edge at 0. It is not minus the primary's width.
+Redo that arithmetic if either panel is replaced. niri reloads on save; `niri msg
+action reload-config` forces it.
+
+**Watch which file you are editing.** niri prefers `~/.config/niri/config.kdl`,
+and here that is a stow symlink into the `dotfiles` repo shared with the Framework
+laptop — so the image's `/etc/niri/config.kdl` is **inert on this machine**. Change
+both, or you will fix a display problem in a file nothing reads. One config can
+serve both machines because niri silently ignores an `output` block whose connector
+is absent; that same silence is why a typo'd connector name reports nothing at all.
+
+The greeter is a third, separate config: `/etc/niri/greeter.kdl` pins the login
+screen to HDMI-A-1 and switches DP-3 `off`, so it is unaffected by the arrangement
+above — but if HDMI-A-1 is ever unplugged, read the failure mode recorded in it.
 
 ### 6.4 Verify the floating window rules actually fire
 
@@ -292,18 +308,79 @@ Fix any pattern that missed, then `niri msg action reload-config`.
 
 ### 6.5 Radios
 
+> [!CAUTION]
+> **Opening the FT-710's CAT port KEYS THE TRANSMITTER.** Not the command — the
+> *open*. A serial open asserts DTR and RTS by default, and on this rig that line
+> is PTT. A plain `rigctl ... f`, which only reads frequency, put the radio into
+> transmit on 2026-08-26. Probing several baud rates made it worse: every attempt
+> that got no reply still opened the port and held PTT until it timed out.
+>
+> So never probe this rig's port bare. Always disable the control lines first:
+>
+> ```bash
+> rigctl -m 1049 -r /dev/serial/by-id/<cable> \
+>        --set-conf=dtr_state=OFF,rts_state=OFF -s 38400 f
+> ```
+>
+> And prefer *asking which port is CAT* over discovering it by sweeping — a sweep
+> is a series of unintended transmissions into whatever load is connected.
+
+Verified on this machine 2026-08-26:
+
+| | |
+|---|---|
+| Rig | Yaesu **FT-710** (`MY_RIG=FT710` on 5,752 logged QSOs) |
+| Hamlib model | **1049** |
+| CAT port | CP2105 **`if00`** — `usb-Silicon_Labs_CP2105_..._01B687FB-if00-port0` |
+| Baud | **38400** (19200 and 115200 got no reply) |
+
+`if01` is the CP2105's second interface and answered on no rate tested; on this
+rig family that port is the PTT/audio side, not CAT.
+
 ```bash
 ls -l /dev/serial/by-id/     # stable names — use these, not /dev/ttyUSB0
-rigctl -m <model> -r /dev/serial/by-id/<cable> -vvv f
 rtl_test -t                  # SDR dongle
 ```
 
 All four cable types on this desk are supported in-tree — including the RT Systems
 USB-29F (`2100:9E55`, claimed by `ftdi_sio`). No udev rule needed. See DESIGN §1.
 
-For a rig shared between apps, run one `rigctld` and point everything at it rather
-than letting six programs fight over the port. To fan a port out to two apps that
-insist on owning one, use `socat`:
+#### One rigctld, bound to the radio — and every app points at it
+
+This is set up: `rigctld.service` (user unit, in the dotfiles `systemd/` package).
+One daemon owns the serial port; nothing else opens it. Two apps opening the same
+tty means whichever starts second simply fails.
+
+It is **bound to the rig's device unit**, not started at login. The FT-710's CAT
+interface is a CP2105 powered by the radio, so it enumerates only while the rig is
+switched on — `BindsTo=`/`WantedBy=` that device unit means rigctld starts when the
+radio comes on and stops when it goes off. No timer, no restart loop against
+hardware that is not there.
+
+```bash
+systemctl --user enable rigctld.service    # start whenever the rig appears
+systemctl --user status rigctld.service
+rigctl -m 2 -r 127.0.0.1:4532 f            # confirm from a second process
+```
+
+Point every client at **Hamlib NET rigctl — model 2 — `127.0.0.1:4532`**:
+
+| App | Setting |
+|---|---|
+| QLog | Rig model *Hamlib NET rigctl*, hostname `127.0.0.1`, port `4532` |
+| WSJT-X | Radio → Rig *Hamlib NET rigctl*, Network Server `127.0.0.1:4532` |
+| Pat | hamlib rig with address `127.0.0.1:4532`, network `tcp` |
+| fldigi | Rig control → Hamlib, NET rigctl at the same address |
+
+Do **not** also give these apps the raw `/dev/serial/by-id/...` path. That is the
+configuration mistake this whole arrangement exists to prevent.
+
+The unit carries `--set-conf=dtr_state=OFF,rts_state=OFF`. Per the CAUTION above
+that is a safety setting, not tuning — and rigctld holds the port open the entire
+time it runs. It also binds `-T 127.0.0.1`: rigctld has no authentication of any
+kind, so anything that can reach the port can key the transmitter.
+
+To fan a port out to two apps that insist on owning one, use `socat`:
 
 ```bash
 socat -d -d pty,raw,echo=0 pty,raw,echo=0     # the com0com replacement
@@ -331,15 +408,33 @@ Two ways, both already in the image.
 **rclone** — gives a real FUSE path immediately, works for every app:
 
 ```bash
-rclone config          # new remote, type: webdav
-                       # url: https://<your-nextcloud>/remote.php/dav/files/<user>/
+rclone config          # new remote, name it `nextcloud`, type: webdav
+                       # vendor: nextcloud
                        # use a Nextcloud app password, not your account password
-mkdir -p ~/Nextcloud
-rclone mount nc: ~/Nextcloud --vfs-cache-mode writes --daemon
 ```
 
-Make it persistent with a user unit in dotfiles (the credentials belong there,
-not in this image).
+> [!IMPORTANT]
+> **The URL must end in `/remote.php/dav/files/<user>/`.** A bare host is the easy
+> mistake and it does not work — rclone refuses with *"the remote url looks
+> incorrect"*. For this machine it is
+> `https://nas1.mystikos.org/remote.php/dav/files/mark/`.
+> Note `rclone config` is a full interactive prompt loop and needs a real TTY, so
+> run it in a terminal window; it cannot be driven from a non-interactive shell.
+> Only the URL is worth recording here — the app password lives in
+> `~/.config/rclone/rclone.conf` and belongs in no repo.
+
+Persistence is `rclone-nextcloud.service` in the dotfiles `systemd/` package
+(credentials belong there, not in this image):
+
+```bash
+systemctl --user enable --now rclone-nextcloud.service
+mountpoint ~/Nextcloud        # must say "is a mountpoint", not just list files
+```
+
+The niri config spawns that unit on the shack machine and, on the laptop only,
+the Nextcloud **desktop sync client** — the two are mutually exclusive by
+hostname guard, because a sync client pointed at `~/Nextcloud` would try to pull
+the whole ~88 GB tree onto a 238 GB disk. Do not remove that guard.
 
 **GVFS** — `davs://` in Thunar, no config needed. WebDAV is built into the base
 `gvfs` (`gvfsd-dav`), so this works out of the box.
@@ -414,6 +509,45 @@ rather than by parsing and re-emitting fields — a re-serialising filter would
 silently drop any field the parser mishandled. The original is kept unmodified
 alongside it.
 
+### 6.8 32-bit Wine needs an SELinux module on this image
+
+**Symptom.** Every 32-bit Windows binary fails instantly under Wine. 64-bit ones
+are fine, which makes it look like a Wine capability problem. It is not.
+
+```bash
+wine /usr/lib64/wine-wow64/wine/i386-windows/cmd.exe /c ver   # the 60-second check
+```
+
+That should print a Windows version. If it exits non-zero, this module is missing.
+
+**Cause.** `avc: denied { execmod } ... tcontext=...:lib_t tclass=file`. 32-bit PE
+DLLs need text relocations, so Wine maps `.text` write-then-execute — the
+`execmod` permission. The confusing part is *who* is denied: Wine runs as
+`unconfined_t` and `selinuxuser_execmod` is already on, yet the denial names
+`kernel_t`. That is because `/` is **composefs**, an overlay whose data lives in
+the ostree object store, and overlayfs checks the backing file with the
+**mounter's** credentials — and the bootc root is mounted by `kernel_t`. So this
+is a property of the image's root filesystem, not of Wine. It does not happen on
+ordinary Fedora, which is exactly why it is surprising here.
+
+**Fix.** Source and rationale are in `selinux/kb3lyb-wine32.te` in this repo:
+
+```bash
+checkmodule -M -m -o /tmp/kb3lyb-wine32.mod selinux/kb3lyb-wine32.te
+semodule_package -o /tmp/kb3lyb-wine32.pp -m /tmp/kb3lyb-wine32.mod
+sudo semodule -i /tmp/kb3lyb-wine32.pp
+sudo semodule -l | grep kb3lyb        # verify
+```
+
+> [!NOTE]
+> This is **machine-local state the image does not describe** — a fresh install
+> will not have it, and this section is the only record of that. It grants
+> `execmod` on all of `lib_t`, which is broader than wanted. The narrow fix is to
+> relabel only Wine's `i386-windows` files, but `/usr` is read-only composefs, so
+> that cannot be done at runtime and has to happen at image build. Bake it once
+> the programmers are known to work; there is no point hardening a path that may
+> yet be abandoned for a Windows VM.
+
 ---
 
 ## 7. Backup checklist — BEFORE wiping
@@ -484,6 +618,13 @@ picking the project up on the shack machine.
   CT29F on `ftdi_sio`, two FT232Rs, both CP2105 interfaces on `cp210x`, a CH340
   on `ch341-uart`. No udev rules needed.
 - Groups fixed (§6.1 — and read that warning, it is not the obvious command).
+- Displays done and verified on the hardware (§6.3): HDMI-A-1 (1920x1080) primary
+  at the origin, DP-3 (1600x900) to its left at `x=-1600`. Note that the config
+  niri actually reads here is the stowed dotfiles copy, not the image's
+  `/etc/niri/config.kdl`; the greeter stays pinned to HDMI-A-1 either way.
+- Nextcloud mounted (§6.6b) as an rclone WebDAV FUSE mount at `~/Nextcloud`,
+  via `rclone-nextcloud.service`, enabled at login. The signing key is reachable
+  again and its public half matches the repo's `cosign.pub`.
 - Logs backed up off the Windows install: 5,804-QSO Log4OM ADIF, WSJT-X data,
   fldigi/NBEMS, RT Systems `.dat` files, Log4OM SQLite, N1MM, HRD, Winlink.
 
@@ -493,32 +634,58 @@ picking the project up on the shack machine.
   installed CHIRP 0.4.0 and its 528 models: the Alinco **DR-CS25** and Wouxun
   **KG-UV96** are both absent. Model names confirmed from the programmers' own
   DLL version resources. Wine is load-bearing, not optional.
-- **`wine-core.i686` was dropped and that is fine.** Fedora 44's
-  `wine-core.x86_64` ships new-WoW64, so 32-bit Windows binaries still run. The
-  i686 package only added the classic `i386-unix` loader, at a cost of 186
-  packages / 1.23 GB. If an RT Systems programmer fails, adding that one line
-  back is the fix — try that before anything else.
+- **`wine-core.i686` was dropped. There are TWO separate 32-bit problems, and
+  this package is the answer to exactly one of them.** Read both before acting.
+  The packaging facts are confirmed: `wine-core.x86_64` ships new-WoW64 (819
+  `i386-windows` PE files, zero `i386-unix`); the i686 package adds only the
+  classic `i386-unix` loader, at 186 packages / 1.23 GB. What was never confirmed
+  was the conclusion "so 32-bit Windows binaries still run" — that came from
+  `rpm -ql`, not from running anything.
+  1. **SELinux `execmod` (§6.8).** Blocks *every* 32-bit PE. `wine-core.i686`
+     does NOT fix this — the denial is on the PE files' label, not the loader.
+     Fixed by the policy module instead.
+  2. **new-WoW64 SEH failure.** With §6.8 in place the DRCS25 installer runs, draws
+     its MFC GUI, accepts a serial and an install path, then dies in
+     `err:seh:call_seh_handlers invalid frame` with addresses above 4 GB inside a
+     32-bit process. `wine-core.i686` IS the lever here: without it,
+     `WINEARCH=win32` is refused outright (*"not supported in wow64 mode"*), so a
+     pure 32-bit prefix — which sidesteps the WoW64 exception path entirely —
+     cannot be created at all.
+  So the old advice to "try adding that line back first" was wrong for problem 1
+  and right for problem 2. Do §6.8 first; reach for i686 only against the SEH
+  crash, and expect the 1.23 GB.
 - **The logs need no deduplication.** See §6.7. Do not "tidy" them.
+- **Passwordless sudo is deliberate — leave it.** `/etc/sudoers.d/99-nopasswd`
+  survives from the remote-setup session and is confirmed still active. The
+  operator has chosen to keep it. Do not "harden" this away.
 
 ### Genuinely open
 
-1. **Do the RT Systems programmers actually work under Wine?** Untested. The
-   cable side is proven; the app side is not. They are native Win32/MFC
-   (`RadioEngine_V5.exe` + per-radio DLL, linked against `mfc100u`), which is a
-   far better Wine prospect than .NET. The risk is serial control-line handling
-   (DTR/RTS) on a cloning cable, not the GUI.
+1. **Do the RT Systems programmers actually work under Wine?** Still untested,
+   but no longer for want of software — `DRCS25_Setup.exe` and `KGUV96_Setup.exe`
+   are downloaded to `~/Downloads`. They are native Win32/MFC (`RadioEngine_V5.exe`
+   + per-radio DLL, linked against `mfc100u`), a far better Wine prospect than
+   .NET, and the cable side is already proven.
+   **Progress on 2026-08-26, and where it stopped.** With §6.8's policy module in
+   place the installer runs: it draws its MFC GUI, takes a language, a serial, an
+   email and an install path, and writes the registration to
+   `Software\RT Systems V5\Alinco\DR-CS25 Programmer` in the prefix. So the Wine
+   GUI layer is not the problem — that much is now evidence, not hope.
+   It then aborts at the file-copy stage with `err:seh:call_seh_handlers invalid
+   frame`, and installs nothing. Adding `mfc100u`/`msvcr100` via
+   `winetricks -q vcrun2010` did not change the outcome (it changed the crash from
+   heap corruption to the SEH abort, which is progress but not a fix).
+   Next lever is `wine-core.i686` + a `WINEARCH=win32` prefix — see the Wine entry
+   above. Only past that does the original question, serial control-line handling
+   (DTR/RTS) on a cloning cable, become answerable at all.
+   Prefix in use: `~/.local/share/wineprefixes/rtsystems`. Installers in `~/Downloads`.
 2. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
    N1MM is needed, use a Windows VM — install `org.gnome.Boxes` then, it is
    deliberately not baked. `not1mm` is the Linux alternative: `pipx install not1mm`.
 3. **niri window rules are unverified.** Run `kb3lyb-check-window-rules` with the
    ham apps open. The `wine` and `sdrtrunk` patterns are the doubtful ones (§6.4).
-4. **Display connector names in `/etc/niri/config.kdl` are placeholders.** Fix
-   from `niri msg outputs` (§6.3).
-5. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
+4. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
    `$HOME` install, deliberately not baked.
-6. **Passwordless sudo** may still be enabled at `/etc/sudoers.d/99-nopasswd`
-   from the remote-setup session. Remove it if you do not want it:
-   `sudo rm /etc/sudoers.d/99-nopasswd`.
 
 ### Working on this repo from the shack machine
 
