@@ -1,0 +1,14 @@
+# bootc-image-builder customizations — VM TESTING ONLY. None of this is baked into
+# the real image; it only shapes the throwaway qcow2 used for the §9.4 boot check.
+#
+#  - a loginable test account (so the greeter/niri session can be exercised)
+#  - sshd enabled, so the headless boot-check can probe greetd/NetworkManager
+#    status over ssh (the real image ships sshd DISABLED, and that stays true).
+
+[[customizations.user]]
+name = "test"
+password = "test"
+groups = ["wheel"]
+
+[customizations.services]
+enabled = ["sshd"]

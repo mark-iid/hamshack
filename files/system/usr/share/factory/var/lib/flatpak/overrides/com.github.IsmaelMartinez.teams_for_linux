@@ -1,0 +1,15 @@
+[Context]
+# The upstream manifest ships `filesystems=home`, i.e. read/write over the whole
+# home directory — ~/.ssh, ~/.gnupg, ~/.config/rclone/rclone.conf, the dotfiles,
+# the login keyring. That is effectively no filesystem sandbox at all, and this
+# is an UNOFFICIAL Teams client, so it earns less trust than most, not more.
+#
+# !home revokes it; xdg-download restores the one path that actually matters for
+# a chat client (saving and attaching files). The file-chooser portal still
+# grants per-file access on demand for anything outside Downloads, so opening an
+# arbitrary document to attach keeps working — the app just cannot roam the
+# filesystem unattended.
+#
+# xdg-run/pipewire-0 is left alone (screen sharing), as is devices=all (camera
+# and microphone for calls).
+filesystems=!home;xdg-download;

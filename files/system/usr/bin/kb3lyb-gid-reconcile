@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Bring an ALREADY-INSTALLED machine's /etc/group in line with the GIDs pinned in
+# /usr/lib/sysusers.d/00-kb3lyb-gids.conf.
+#
+# WHY A RUNTIME STEP IS NEEDED AT ALL. The pin file fixes the numbering for any
+# machine that creates these groups fresh. It does nothing for a machine that
+# already has them: systemd-sysusers never renumbers an existing entry, and
+# /etc/group is local state that survives a rebase. So a laptop that allocated
+# `kismet` at 960 before the pin existed keeps 960 forever, while every new image
+# ships /usr/bin/kismet_cap_* owned by 350 — the same mismatch as before, just
+# with different numbers.
+#
+# This closes that gap once, on the first boot after the pinned image lands, and
+# then does nothing on every subsequent boot.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: restamp files. /usr already carries the
+# pinned numbers (it came from the image), and files elsewhere that still hold a
+# pre-migration number cannot be attributed to a group by number alone — the
+# number meant something different before the move. Those are reported, not
+# guessed at.
+set -uo pipefail
+
+PIN_FILE=/usr/lib/sysusers.d/00-kb3lyb-gids.conf
+[ -r "$PIN_FILE" ] || exit 0
+
+changed=0
+rc=0
+old_gids=()
+
+while read -r kind name want _rest; do
+  [ "$kind" = "g" ] || continue
+  case "$want" in ''|*[!0-9]*) continue ;; esac
+
+  have=$(getent group "$name" | cut -d: -f3)
+  [ -n "$have" ] || continue          # group absent here; sysusers will make it right
+  [ "$have" = "$want" ] && continue   # already correct — the steady state
+
+  clash=$(getent group "$want" | cut -d: -f1)
+  if [ -n "$clash" ] && [ "$clash" != "$name" ]; then
+    echo "kb3lyb-gid-reconcile: cannot move $name -> $want; gid $want held by '$clash'" >&2
+    rc=1
+    continue
+  fi
+
+  if groupmod -g "$want" "$name"; then
+    echo "kb3lyb-gid-reconcile: $name $have -> $want"
+    old_gids+=("$have")
+    changed=$((changed + 1))
+  else
+    echo "kb3lyb-gid-reconcile: groupmod -g $want $name failed" >&2
+    rc=1
+  fi
+done < "$PIN_FILE"
+
+# Report anything left holding a number we just vacated, rather than silently
+# reassigning it. On this image that is the mosquitto config under /etc, which is
+# inert; anything else is worth a human looking at it.
+for g in "${old_gids[@]:-}"; do
+  [ -n "$g" ] || continue
+  orphans=$(find /etc /var -xdev -gid "$g" -print 2>/dev/null | head -20)
+  if [ -n "$orphans" ]; then
+    echo "kb3lyb-gid-reconcile: files still owned by vacated gid $g (fix by hand if they matter):"
+    printf '  %s\n' $orphans
+  fi
+done
+
+[ "$changed" -gt 0 ] && echo "kb3lyb-gid-reconcile: renumbered $changed group(s)"
+exit "$rc"

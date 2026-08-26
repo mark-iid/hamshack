@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Homebrew upgrade (DESIGN §5)
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

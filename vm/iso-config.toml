@@ -1,0 +1,23 @@
+# bootc-image-builder installer customization for build-iso.sh.
+#
+# ⚠️  WHY THIS FILE EXISTS: `--type anaconda-iso` is UNATTENDED BY DEFAULT. With no
+# kickstart, bootc-image-builder emits an installer that wipes the FIRST DISK IT
+# FINDS with no prompt, no target selection, and no encryption. That is exactly
+# how a previous build silently overwrote a live machine's internal NVMe.
+#
+# An EMPTY kickstart forces Anaconda to run INTERACTIVELY: bootc-image-builder
+# still injects the `ostreecontainer` line that installs THIS image, but adds no
+# clearpart/autopart/reboot flags, so Anaconda stops at its interactive hub and
+# waits for you to choose the disk, the partitioning (pick btrfs-on-LUKS for the
+# encryption you want), and the user account. Nothing is written until you click
+# "Begin Installation".
+#
+# Do NOT delete `contents` or add autopart/clearpart/reboot here unless you truly
+# want an unattended, disk-wiping installer.
+#
+# Note (documented quirk of the interactive bootc install): in custom
+# partitioning you must create the partitions yourself and give /boot the label
+# `boot`. "Automatic" partitioning in the GUI also works if you don't need custom
+# layout. See: https://supakeen.com/weblog/building-interactive-installer-bootc/
+[customizations.installer.kickstart]
+contents = ""

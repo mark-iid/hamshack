@@ -1,0 +1,26 @@
+[Context]
+# !x11 revokes the plain X11 socket. The manifest grants BOTH `x11` and
+# `fallback-x11`; those are not the same thing. `x11` is unconditional, so
+# Bitwarden could reach Xwayland (niri sets DISPLAY=:0 session-wide and
+# xwayland-satellite is always up) — and X11 has no inter-client isolation, so
+# any other X client can read a window's input and contents. That is a poor
+# property for the password manager specifically.
+#
+# `fallback-x11` goes with it, and NOT by choice: flatpak treats fallback-x11 as
+# a variant of the x11 socket, so `--nosocket=x11` clears both. Verified on the
+# live system — after the override, `flatpak info --show-permissions` reports
+# `sockets=wayland;` alone. Keeping `fallback-x11;` in this file would therefore
+# be a lie about the resulting sandbox; this line is written to match exactly
+# what `flatpak override --system --nosocket=x11` produces.
+#
+# No practical loss: fallback-x11 only ever applies when the wayland socket is
+# absent, and if Wayland is down under niri there is no desktop to run Bitwarden
+# in anyway.
+sockets=wayland;!x11;
+# devices=!all;dri — the manifest grants `all`: webcam, microphone, raw USB. A
+# password manager needs the GPU and nothing else on that list. Verified as a
+# --user override first: Bitwarden launches and maps its window with this applied.
+devices=!all;dri;
+
+[Environment]
+ELECTRON_OZONE_PLATFORM_HINT=auto

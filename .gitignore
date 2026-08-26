@@ -1,0 +1,21 @@
+cosign.key
+cosign.private
+/Containerfile
+*.iso
+*.iso-CHECKSUM
+/.bluebuild-scripts_*
+
+# Python bytecode (vm/serial-cmd.py). A tracked .pyc is both churn and a poor
+# place to notice a change — bytecode does not review.
+__pycache__/
+*.pyc
+
+# VM test artifacts (large disk images / exported archives / runtime junk)
+/vm/output/
+/vm/*.oci
+/vm/*.pid
+/vm/*.sock
+*.oci
+*.qcow2
+*.tar
+*.tar.gz

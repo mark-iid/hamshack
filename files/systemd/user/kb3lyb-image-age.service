@@ -1,0 +1,15 @@
+[Unit]
+Description=Warn when the booted OS image has gone stale (DESIGN §5)
+# No network dependency on purpose: this reads local deployment metadata only. It
+# must still fire on a machine whose problem IS that it cannot reach the registry.
+
+[Service]
+Type=oneshot
+# A user unit rather than a system one, because the entire point is to put a
+# notification in front of a human, and notify-send needs the session bus. A
+# system unit would have to reach into the session to do it.
+ExecStart=/usr/bin/kb3lyb-image-age --check
+# --check exits 1 when the image is stale. That is the working case, not a
+# failure of the unit, and letting systemd mark it failed would bury the signal
+# in exactly the place nobody looks.
+SuccessExitStatus=0 1

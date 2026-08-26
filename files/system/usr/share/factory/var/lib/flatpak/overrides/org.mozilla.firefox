@@ -1,0 +1,15 @@
+[Context]
+# devices=!all;dri — the manifest grants `all`, which is every device node the
+# sandbox can see: webcam, microphone, raw USB. A browser needs the GPU, not the
+# camera; WebRTC capture goes through the portal, which is not affected by this.
+#
+# features=!devel — `devel` relaxes the seccomp filter INSIDE the sandbox to
+# permit ptrace and perf. That is a debugging affordance, and it weakens the one
+# boundary containing the most hostile input on the machine.
+#
+# VERIFIED, not assumed: with both applied, a headless render of a real page in a
+# fresh profile produced a valid PNG, so content processes still work. Tested as a
+# --user override first, which reproduces a system override's effect exactly (the
+# com.discordapp.Discord incident proved that equivalence in the other direction).
+devices=!all;dri;
+features=!devel;

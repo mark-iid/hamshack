@@ -1,0 +1,88 @@
+name: fedora-version-bump
+# DESIGN §5: detect a new Fedora Atomic release and open a PR bumping the pinned
+# image-version. The operator merges it — this gives automatic *detection* without
+# letting Fedora pick the upgrade date. The base image is never a floating tag.
+#
+# The PR's own CI build (build.yml runs on pull_request) is the safety gate: if the
+# new release can't depsolve — most likely the codec module (DESIGN §1/§9.2) — the
+# PR shows a red X and the laptop keeps running the last good image.
+on:
+  schedule:
+    - cron: "0 12 * * 1" # weekly, Monday 12:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check for a newer Fedora release
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to commit SHAs rather than mutable tags — see the note
+      # in build.yml. Dependabot bumps the SHA and the version comment together.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y skopeo
+
+      - name: Detect current pin vs latest Fedora stable
+        id: detect
+        run: |
+          set -euo pipefail
+          current=$(grep -oP '^image-version:\s*\K[0-9]+' recipes/recipe.yml)
+
+          # Latest STABLE Fedora = highest numbered dir under releases/. Pre-release
+          # (Branched/Beta) versions do not appear here, so this won't propose a
+          # bump to an unreleased Fedora even though its container tag may exist.
+          latest=$(curl -fsSL https://dl.fedoraproject.org/pub/fedora/linux/releases/ \
+            | grep -oE 'href="[0-9]+/"' | grep -oE '[0-9]+' | sort -n | tail -1)
+
+          # Only propose if the base image for that release actually exists.
+          if skopeo inspect "docker://quay.io/fedora-ostree-desktops/sway-atomic:${latest}" >/dev/null 2>&1; then
+            image_exists=true
+          else
+            image_exists=false
+          fi
+
+          echo "current=$current"           >> "$GITHUB_OUTPUT"
+          echo "latest=$latest"             >> "$GITHUB_OUTPUT"
+          echo "image_exists=$image_exists" >> "$GITHUB_OUTPUT"
+          if [ "$latest" -gt "$current" ] && [ "$image_exists" = true ]; then
+            echo "should_bump=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "should_bump=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "current=$current latest=$latest image_exists=$image_exists"
+
+      - name: Bump image-version in all recipes
+        if: steps.detect.outputs.should_bump == 'true'
+        run: |
+          set -euo pipefail
+          for f in recipes/recipe.yml recipes/codec-test.yml recipes/ham-test.yml; do
+            sed -i "s/^image-version: .*/image-version: ${{ steps.detect.outputs.latest }}/" "$f"
+          done
+
+      - name: Open PR
+        if: steps.detect.outputs.should_bump == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          branch: fedora-bump-${{ steps.detect.outputs.latest }}
+          delete-branch: true
+          commit-message: "Bump base image to Fedora ${{ steps.detect.outputs.latest }}"
+          title: "Bump base image to Fedora ${{ steps.detect.outputs.latest }}"
+          body: |
+            Automated by `fedora-version-bump` (DESIGN §5).
+
+            Fedora **${{ steps.detect.outputs.latest }}** is out and
+            `quay.io/fedora-ostree-desktops/sway-atomic:${{ steps.detect.outputs.latest }}`
+            exists. Pinned `image-version` bumped
+            ${{ steps.detect.outputs.current }} → ${{ steps.detect.outputs.latest }}
+            in `recipe.yml`, `codec-test.yml` and `ham-test.yml`.
+
+            **Do not merge until this PR's build is green.** The build is the
+            depsolve gate — the codec module (RPM Fusion, the fragile one) is the
+            most likely thing to fail on a new release. If it's red, RPM Fusion
+            hasn't caught up yet; leave the PR open and the laptop keeps running the
+            last good image.

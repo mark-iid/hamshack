@@ -1,0 +1,20 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+# The ham stack ALONE, to confirm it depsolves on the pinned Fedora before it is
+# entangled with a compositor, a codec swap and a desktop. Same role codec-test.yml
+# plays for the codec module, and for the same reason: when a Fedora bump breaks
+# this image, the ham packages and the codecs are the two places it will break,
+# and a 90-second targeted build beats bisecting a 20-minute full one.
+#
+#     ./build-local.sh recipes/ham-test.yml     # tag derived from this file
+#
+# This is a DEPSOLVE test, not a functional one. It proves the package names still
+# exist and still resolve together. It cannot prove wsjtx talks to a radio.
+name: kb3lyb-ham-test
+description: ham radio stack depsolve smoke test
+
+base-image: quay.io/fedora-ostree-desktops/sway-atomic
+image-version: 44
+
+modules:
+  - from-file: common/hamradio.yml

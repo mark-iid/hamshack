@@ -1,0 +1,287 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+# image will be published to ghcr.io/<user>/kb3lyb-shack
+name: kb3lyb-shack
+description: HP EliteDesk 800 G3 DM 65W, ham shack, niri session
+
+# Fedora Sway Atomic, same base as the kb3lyb-sway laptop image so the two share a
+# session stack and the lessons learned about it. Pinned explicitly; never a
+# floating tag. Bumped by an automated PR (.github/workflows/fedora-version-bump.yml).
+base-image: quay.io/fedora-ostree-desktops/sway-atomic
+image-version: 44
+
+# WHAT MAKES THIS IMAGE DIFFERENT FROM kb3lyb-sway, in one place, so the diff
+# between the two repos is never a mystery:
+#
+#   ADDED    the ham radio stack (recipes/common/hamradio.yml) — the entire point
+#   ADDED    Wine incl. 32-bit multilib, for the RT Systems radio programmers
+#   CHANGED  codecs: intel-media-driver (RPM Fusion NONFREE) instead of the AMD
+#            mesa-va-drivers-freeworld — Skylake HD Graphics 530, not a Radeon APU
+#   CHANGED  displays: multi-monitor at 1x scale, not one 1.35-scaled HiDPI panel
+#   CHANGED  niri: window rules that open the ham apps FLOATING (see below)
+#   DROPPED  fprintd / fingerprint auth — no reader on a desktop
+#   DROPPED  power-profiles switching, brightnessctl, battery bits — it is a
+#            desktop on mains power; the AC/battery logic has nothing to switch on
+#   DROPPED  the Framework-specific kargs and expansion-card USB workarounds
+#
+# TARGET HARDWARE, as read off the machine on 2026-08-25 rather than assumed:
+#   HP EliteDesk 800 G3 DM 65W  (G3, not G4 — checked via Win32_ComputerSystem)
+#   Intel Core i5-6500, Skylake, 4 cores / 4 threads (NO hyperthreading), 3.2 GHz
+#   Intel HD Graphics 530 (Gen9)
+#   16 GB RAM
+#   256 GB WD PC SN740 NVMe — SINGLE disk, and the tightest resource on the box
+#   wired ethernet, multi-head desk
+#   SAME     the daily-driver userland: Evolution, the Flatpak app set, VS Code,
+#            dev tooling, ghostty, and the dotfiles bootstrap. This box is a shack
+#            PC AND a desktop, so the laptop's setup carries over rather than
+#            being trimmed to "single purpose".
+#
+modules:
+  # NOTE: the `files` module is deliberately NOT first — package installs come
+  # first, so that an rpm can never land on top of baked config and revert it.
+  # This ordering is load-bearing; it was a real defect in the laptop repo.
+
+  # Codecs: RPM Fusion + ffmpeg swap + the INTEL VA-API driver. Read the header of
+  # common/codecs.yml before touching it — the free/nonfree split matters here in
+  # a way it does not on the AMD laptop.
+  - from-file: common/codecs.yml
+
+  # The ham radio stack. Isolated so recipes/ham-test.yml can depsolve it alone.
+  - from-file: common/hamradio.yml
+
+  # Session stack. Same set as the laptop image minus the battery/backlight
+  # pieces, which have nothing to act on here.
+  - type: dnf
+    install:
+      packages:
+        # compositor + XWayland. xwayland-satellite is NOT optional on this
+        # machine: fldigi is FLTK/X11, and chirp+wx is wxPython/GTK2-era — both
+        # are Xwayland clients, not Wayland ones.
+        - niri
+        - xwayland-satellite
+        # wmctrl — EWMH control for Xwayland clients that manage their own
+        # fullscreen and re-assert it against the compositor.
+        - wmctrl
+        # greeter
+        - greetd
+        - tuigreet
+        # bar / notifications / launcher / lock
+        - waybar
+        - mako
+        - fuzzel
+        - gtklock
+        # screenshots + clipboard
+        - grim
+        - slurp
+        - wl-clipboard
+        - cliphist
+        # display config. EARNS ITS PLACE HERE more than it does on the laptop:
+        # kanshi profiles are how a multi-head desk gets a deterministic layout
+        # instead of whatever order the outputs happened to enumerate in.
+        - kanshi
+        # terminal. foot only — the laptop's ghostty comes from a COPR, and this
+        # machine has no reason to carry an external repo for a terminal.
+        - foot
+        - mate-polkit
+        - wtype
+        - playerctl
+        - blueman
+        - network-manager-applet
+        # NOT INSTALLED, deliberately: brightnessctl (no backlight),
+        # power-profiles-daemon / tuned-ppd switching (no battery).
+
+  # Icon font for waybar's status glyphs. Without it every battery/network/volume
+  # glyph in style.css renders as a tofu box. Symbols-only Nerd Font is not in the
+  # Fedora repos, so it comes from the upstream release via the fonts module
+  # rather than a third-party repo.
+  - type: fonts
+    fonts:
+      nerd-fonts:
+        - NerdFontsSymbolsOnly
+
+  # ghostty — primary terminal, matching the laptop. Not in Fedora repos;
+  # scottames/ghostty is the COPR ghostty's own install docs endorse. Listed as a
+  # PLAIN package, not the scoped `repo: copr:…` form: ghostty pulls zlib-ng and
+  # gtk4-layer-shell as deps and those live in the Fedora repo, so the scoped form
+  # restricts resolution to the COPR alone and fails with "nothing provides
+  # zlib-ng". Enabling the COPR and listing the package plainly lets deps resolve
+  # across both.
+  - type: dnf
+    repos:
+      copr:
+        - scottames/ghostty
+    install:
+      packages:
+        - ghostty
+
+  - type: dnf
+    repos:
+      copr:
+        - leloubil/wl-clip-persist
+    install:
+      packages:
+        - wl-clip-persist
+
+  # System / userland / dev tooling — mirroring the laptop image, because this box
+  # is a daily driver as well as a shack PC. Only VS Code needs an external repo.
+  #
+  # NOT carried over from the laptop, because the hardware cannot use them:
+  # fprintd/fprintd-pam (no reader), brightnessctl (no backlight), wavemon
+  # (wired ethernet, no wifi link to monitor).
+  - type: dnf
+    repos:
+      keys:
+        - https://packages.microsoft.com/keys/microsoft.asc
+      files:
+        - vscode.repo   # -> files/dnf/vscode.repo
+    install:
+      packages:
+        - code                              # VS Code (MS repo)
+        - tailscale
+        - wireguard-tools
+        - openconnect
+        - NetworkManager-openconnect-gnome
+        - iperf3
+        - kismet
+        - mtr
+        - fping
+        - bmon
+        - nmap
+        - wireshark-cli
+        - smartmontools
+        - rpi-imager
+        # unrar resolves to RPM Fusion's RARLAB build ONLY because the codec module
+        # runs first and persists the rpmfusion repos. Reorder the modules and it
+        # quietly degrades to Fedora's unrar-free wrapper — no build error, RAR
+        # extraction just stops working. Asserted in image-assert.sh.
+        - unrar
+        - gcc
+        - gcc-c++
+        - make
+        - cmake
+        - ninja-build
+        - pkgconf
+        - clang-tools-extra
+        - gdb
+        - jq
+        - NetworkManager-tui
+        - restic
+        - rclone
+        - fuse3
+        - stow                              # dotfiles deploy
+        - zsh                               # login shell the dotfiles target
+        - git
+        # socat — stands in for the com0com null-modem emulator the Windows setup
+        # used: `socat -d -d pty,raw,echo=0 pty,raw,echo=0` gives a pair of linked
+        # ptys, which is how you fan one rig's CAT port out to two apps, or test a
+        # decoder with no radio attached.
+        - socat
+        # pipx — for not1mm, the Linux contest logger (DESIGN §5). PyQt6, PyPI-only,
+        # and releasing almost daily; baking a fast-moving pip app into a signed
+        # image would mean rebuilding the image to take a bugfix.
+        - pipx
+
+  # Evolution (mail) — layered NATIVE rather than flatpak. Native gives reliable
+  # Microsoft 365 / Graph OAuth against the system Secret Service keyring and keeps
+  # the evolution-ews backend out of the flatpak sandbox. evolution-ews provides
+  # the "Microsoft 365" account type (plain EWS is being retired by Microsoft).
+  - type: dnf
+    install:
+      packages:
+        - evolution
+        - evolution-ews
+
+  # GUI apps as flatpaks, same set as the laptop. Electron apps are forced onto
+  # native Wayland via seeded overrides — see files/.../factory + the tmpfiles.d
+  # rules.
+  #
+  # Discord MUST have NO flatpak override — any override on it, even sockets
+  # alone, puts the renderer in a segfault loop behind a stuck "Discord Updater"
+  # splash. Bisected on the laptop rather than reasoned about. See the note in
+  # files/system/usr/lib/tmpfiles.d/kb3lyb-flatpak-overrides.conf.
+  - type: default-flatpaks
+    configurations:
+      - notify: true
+        scope: system
+        install:
+          - org.mozilla.firefox
+          - io.github.ungoogled_software.ungoogled_chromium
+          - com.bitwarden.desktop
+          - com.nextcloud.desktopclient.nextcloud
+          - com.slack.Slack
+          - com.discordapp.Discord
+          - io.github.dweymouth.supersonic
+          - org.libreoffice.LibreOffice
+          - io.github.kolunmi.Bazaar
+          - net.cozic.joplin_desktop
+          - org.videolan.VLC
+          - us.zoom.Zoom
+          - com.github.IsmaelMartinez.teams_for_linux
+          - com.github.tchx84.Flatseal
+          - com.github.wwmm.easyeffects
+          - io.missioncenter.MissionCenter
+          - org.gnome.Firmware
+          - org.remmina.Remmina
+          - org.gimp.GIMP
+          - org.audacityteam.Audacity
+          - fr.handbrake.ghb
+          - com.usebruno.Bruno
+          - org.gnome.Boxes
+      - scope: user
+        install:
+          - org.gnome.seahorse.Application
+
+  # Baked config: niri (incl. the floating window rules for the ham apps), greetd,
+  # waybar, mako, foot, kanshi, sysctl hardening, pinned GIDs.
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  - type: script
+    scripts:
+      # FIRST — everything after it that touches a group by name has to resolve to
+      # the pinned number rather than whatever this build container allocated.
+      # rtl-sdr's udev rules use GROUP="rtlsdr", which is dynamically allocated;
+      # see files/system/usr/lib/sysusers.d/00-kb3lyb-gids.conf.
+      - pin-gids.sh
+      # Narrow kismet's setuid-root capture helpers from world-executable to
+      # 4750 root:kismet. MUST come after the dnf module that installs kismet —
+      # the script hard-fails if kismet is absent rather than silently no-opping.
+      # Needs a per-machine follow-up: usermod -aG kismet <user>.
+      - kismet-suid-scope.sh
+
+  - type: systemd
+    system:
+      enabled:
+        - greetd.service
+        - tailscaled.service
+        - sshd.service            # admin path for this machine (over Tailscale)
+        - rpm-ostreed-automatic.timer
+        - flatpak-update.timer
+        # One-time migration for a machine whose /etc/group predates the pinned
+        # GIDs. Idempotent — once every pinned group holds its pinned number this
+        # does nothing, every boot.
+        - kb3lyb-gid-reconcile.service
+      disabled:
+        - sddm.service
+    user:
+      enabled:
+        - brew-upgrade.timer
+        - flatpak-update-user.timer
+        # Breaks the silence when the image stops moving. The safety property this
+        # update model rests on — a broken build leaves the machine on the last
+        # good image — has no signal attached to it otherwise, so a nightly that
+        # has been red for a month looks exactly like one that has been green.
+        - kb3lyb-image-age.timer
+
+  # Postconditions. MUST BE THE LAST module that can fail — signing follows and
+  # only signs what was built. A green depsolve says the recipe resolved; it says
+  # nothing about whether the image is the one described above. Every check in
+  # this script corresponds to a hazard documented in prose somewhere in this repo,
+  # and prose cannot fail a build.
+  - type: script
+    scripts:
+      - image-assert.sh
+
+  - type: signing

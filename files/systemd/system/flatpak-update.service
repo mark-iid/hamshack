@@ -1,0 +1,34 @@
+[Unit]
+Description=Update system flatpaks
+Wants=network-online.target
+After=network-online.target
+# Don't fight the first-boot flatpak install (default-flatpaks module).
+After=flatpak-system-update.service
+
+[Service]
+Type=oneshot
+# Wrapped rather than calling `flatpak update` directly. Two failure modes made
+# the bare command report success while updating nothing — a resume-time run
+# racing wifi association, and flatpak treating an unreadable remote as
+# non-fatal and exiting 0. See the header of kb3lyb-flatpak-update for the full
+# writeup and the 2026-08-16 journal evidence.
+ExecStart=/usr/bin/kb3lyb-flatpak-update --system
+# The wrapper waits up to 60s for connectivity and retries a blind run twice
+# with backoff, so give it room to finish rather than being killed mid-retry.
+TimeoutStartSec=30min
+
+# NO SuccessExitStatus override, and now it actually means something. This used
+# to carry `SuccessExitStatus=0 1` to keep an offline run from reporting failure
+# — but `flatpak update` exits 1 for *both* "no network" and "the update
+# actually failed", so that setting made the unit report success no matter what
+# went wrong. A browser that quietly stopped receiving security updates would
+# have shown green forever.
+#
+# Note that removing it was necessary but NOT sufficient: the metadata-blind
+# failure exits 0 on its own, so no exit-code policy could ever have caught it.
+# That is what the wrapper is for.
+#
+# The trade is accepted deliberately: on a laptop that is often off-network, an
+# offline day now leaves the unit failed until the next successful run. That is
+# mild noise, but it is *true* — it means the system flatpaks are not current,
+# which is exactly what `systemctl --failed` should be telling you.

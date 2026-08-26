@@ -1,0 +1,10 @@
+[Unit]
+Description=Upgrade Homebrew packages (DESIGN §5)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# brew lives in $HOME (linuxbrew), installed per-user by kb3lyb-bootstrap. No-op if
+# it isn't installed yet, so the timer is harmless before first-run setup.
+ExecStart=/bin/bash -lc 'b=/home/linuxbrew/.linuxbrew/bin/brew; [ -x "$b" ] || exit 0; eval "$("$b" shellenv)"; brew update && brew upgrade'

@@ -1,0 +1,15 @@
+[Unit]
+Description=System flatpak update — daily + shortly after boot (DESIGN §5)
+
+[Timer]
+# Daily, plus ~3 min after each boot: this is a laptop that's often off
+# overnight, so the daily slot alone gets missed for updates that land after
+# the last successful run. Persistent=true only re-runs a *missed* slot, not
+# one that already ran today, so the boot trigger covers that gap.
+OnCalendar=daily
+OnBootSec=3min
+Persistent=true
+RandomizedDelaySec=3min
+
+[Install]
+WantedBy=timers.target

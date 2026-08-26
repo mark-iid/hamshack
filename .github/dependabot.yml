@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # weekly instead of daily — action bumps are rarely urgent and daily is noisy
+      interval: "weekly"
+    groups:
+      # roll all GitHub Actions bumps into ONE grouped PR instead of one-per-action
+      github-actions:
+        patterns:
+          - "*"

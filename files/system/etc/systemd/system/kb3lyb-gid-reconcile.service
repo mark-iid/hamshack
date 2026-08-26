@@ -1,0 +1,18 @@
+[Unit]
+Description=Align /etc/group with the image's pinned GIDs (one-time migration)
+Documentation=file:///usr/lib/sysusers.d/00-kb3lyb-gids.conf
+# After sysusers so any group it is going to create already exists, and before
+# anything that might care which number these groups have.
+After=systemd-sysusers.service
+Before=multi-user.target
+ConditionPathExists=/usr/lib/sysusers.d/00-kb3lyb-gids.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/kb3lyb-gid-reconcile
+# Idempotent by construction: once every pinned group holds its pinned GID this
+# exits 0 having done nothing, on this and every later boot.
+
+[Install]
+WantedBy=multi-user.target

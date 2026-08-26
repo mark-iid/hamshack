@@ -1,0 +1,21 @@
+[Unit]
+Description=Update user flatpaks (DESIGN §5)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Same wrapper as the system timer, different scope — see its header for why
+# `flatpak update` is not safe to drive from a timer unbwrapped.
+#
+# THIS DOES NOT HIT POLKIT. The recipe used to claim a user flatpak update would
+# "hit polkit and stall", which is why user scope had no updater at all and the
+# three runtimes installed there (Mesa GL x2, codecs-extra) sat pending
+# indefinitely. That is only true of touching the SYSTEM installation as a
+# non-root user. A --user update owns everything it writes
+# (~/.local/share/flatpak) and needs no authorisation; verified 2026-08-16 by
+# running it under `systemd-run --user`, which completed with exit 0 and no
+# prompt. Running as a user unit — not a system unit dropping privileges — is
+# what keeps that true.
+ExecStart=/usr/bin/kb3lyb-flatpak-update --user
+TimeoutStartSec=30min

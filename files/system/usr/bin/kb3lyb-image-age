@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# kb3lyb-image-age — how old is the image this machine is running, and say so out
+# loud when it stops moving.
+#
+# WHY. The whole update design (DESIGN §5) leans on one safety property: if a
+# build breaks, the laptop keeps running the last good image. That is the right
+# behaviour, and it is also completely silent. A nightly build that has been red
+# for three weeks looks exactly like a nightly build that has been green for
+# three weeks — from here, nothing changes either way. The red X on GitHub only
+# helps someone who goes and looks at GitHub.
+#
+# The same silence covers the other half of the path: rpm-ostreed-automatic
+# staging a pull that never succeeds, a registry auth problem, or a laptop that
+# has simply not been booted long enough to finish an update. All of them present
+# as "everything is fine, and old".
+#
+# So: check the age of the booted deployment and notify past a threshold. This
+# does NOT try to diagnose which of those went wrong — it just breaks the silence
+# so someone goes and looks.
+#
+#   kb3lyb-image-age              # print the age and exit
+#   kb3lyb-image-age --check      # notify + exit 1 if older than the threshold
+#
+# Threshold in days, default 14. Nightly builds mean a healthy machine is usually
+# a day or two old, but a week away from the laptop is normal and must not cry
+# wolf; 14 days cannot be reached by ordinary use.
+#
+#   KB3LYB_IMAGE_MAX_AGE_DAYS=21 kb3lyb-image-age --check
+#
+# Deliberately POSIX sh + jq, not python: the only python3 on this machine comes
+# from brew, i.e. from $HOME (DESIGN §2), and a system health check may not depend
+# on a per-user install. jq is layered in the image.
+set -uo pipefail
+
+MAX_AGE_DAYS="${KB3LYB_IMAGE_MAX_AGE_DAYS:-14}"
+check=0
+[ "${1:-}" = "--check" ] && check=1
+
+status=$(rpm-ostree status --json 2>/dev/null) || {
+  # rpm-ostreed unreachable. Not worth a notification — that is its own, louder
+  # problem, and guessing here would produce a misleading message.
+  echo "kb3lyb-image-age: could not read rpm-ostree status" >&2
+  exit 0
+}
+
+booted=$(printf '%s' "$status" | jq -c 'first(.deployments[] | select(.booted == true))')
+[ -n "$booted" ] && [ "$booted" != "null" ] || {
+  echo "kb3lyb-image-age: no booted deployment in rpm-ostree status" >&2
+  exit 0
+}
+
+ref=$(printf '%s' "$booted" | jq -r '.["container-image-reference"] // ""')
+ts=$(printf '%s' "$booted"  | jq -r '.timestamp // empty')
+ver=$(printf '%s' "$booted" | jq -r '.version // "unknown"')
+
+# Only meaningful for a deployment tracking this image. If the machine has been
+# rebased somewhere else on purpose, staying quiet is correct.
+case "$ref" in
+  *kb3lyb-sway*) ;;
+  *) echo "kb3lyb-image-age: booted deployment is not kb3lyb-sway (${ref:-none}) — nothing to check"; exit 0 ;;
+esac
+
+[ -n "$ts" ] || { echo "kb3lyb-image-age: deployment has no timestamp" >&2; exit 0; }
+
+# .timestamp is the ostree commit time, which for a container deployment is when
+# the IMAGE WAS BUILT — not when it was pulled or booted. That is exactly the
+# question being asked, and it is why this does not use uptime or the boot time.
+age_days=$(( ( $(date +%s) - ts ) / 86400 ))
+
+if [ "$check" -eq 0 ]; then
+  printf 'image %s is %d day(s) old (built %s)\n' \
+    "$ver" "$age_days" "$(date -d "@$ts" '+%Y-%m-%d %H:%M')"
+  exit 0
+fi
+
+[ "$age_days" -le "$MAX_AGE_DAYS" ] && exit 0
+
+# Past the threshold. urgency=critical so mako holds it on screen rather than
+# timing it out while the session is unattended — the whole point is that this
+# one does not get missed.
+body="Running ${ver}, built $(date -d "@$ts" '+%Y-%m-%d') (${age_days} days ago).
+Nightly builds should keep this under a day or two. Check the build on GitHub and
+'rpm-ostree status' for a staged-but-unapplied update."
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send --urgency=critical --app-name=kb3lyb \
+    "OS image is ${age_days} days old" "$body"
+fi
+printf 'kb3lyb-image-age: STALE — %s\n' "$body" >&2
+exit 1

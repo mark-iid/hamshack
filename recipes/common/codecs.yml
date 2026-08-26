@@ -1,0 +1,57 @@
+---
+# Shared codec module: RPM Fusion + full ffmpeg swap + Intel VA-API driver.
+# Included by both recipe.yml (the real image) and codec-test.yml (the isolated
+# depsolve smoke test) via `from-file:`, so there is one source of truth for the
+# most fragile part of the build.
+#
+# THIS DIFFERS FROM THE LAPTOP IMAGE and the difference is the whole point of the
+# file. kb3lyb-sway runs a Framework 13 AMD (radeonsi) and installs
+# `mesa-va-drivers-freeworld` from RPM Fusion FREE. This machine is an EliteDesk
+# 800 G4 Mini — Coffee Lake, Intel UHD 630 (Gen9.5) — where VA-API is served by
+# the iHD driver in `intel-media-driver`, and mesa's gallium VA path is simply not
+# in play. Two consequences worth stating out loud:
+#
+#   1. intel-media-driver is in RPM Fusion NONFREE, not free. Verified 2026-08-25:
+#      nonfree/updates has 26.1.5; free has no build of it at all. The `repos:`
+#      block below therefore MUST keep `nonfree: rpmfusion` — dropping to free
+#      would still depsolve for ffmpeg and then quietly leave the box with no
+#      hardware decode.
+#   2. mesa-va-drivers-freeworld is deliberately NOT installed. It would resolve
+#      fine and do nothing: libva picks its backend from the DRM driver name, and
+#      i915/xe select iHD_drv_video.so. Installing it would only add a package
+#      whose entire job is a GPU this machine does not have.
+#
+# Design notes inherited from the laptop image (still true, still hard-won):
+#   * Uses a single `install: {allow-erasing: true}` transaction, NOT the dnf
+#     module's `replace:` block. `replace:` runs each old->new pair as its own
+#     `dnf swap --allowerasing` transaction, and sequenced that way one swap rips
+#     out libs the previous one just placed. One install transaction lets the
+#     solver see every conflict at once.
+#   * The rpmfusion ffmpeg Conflicts with the base's split -free ffmpeg libs, so
+#     --allowerasing removes the base set and installs the rpmfusion set together.
+#
+# Verify on the installed machine (NOT at build time — it needs the real GPU):
+#     vainfo | head        # expect "Driver version: Intel iHD driver"
+modules:
+  # Fetch the two rpmfusion-*-release RPMs ourselves first, with retries and a
+  # fallback to RPM Fusion's origin host. The dnf module below still declares
+  # `repos: {nonfree: rpmfusion}` and MUST keep doing so — its enable_rpmfusion
+  # is guarded on `rpm -q rpmfusion-free-release`, so pre-seeding turns the
+  # download into a no-op while leaving the rest of its repo setup in place.
+  #
+  # This is here because librepo gives each mirror one 30 s connect timeout and
+  # no backoff, and this module is FIRST in the build — so on the laptop repo one
+  # slow mirror took down a whole image build before a single package was even
+  # considered.
+  - type: script
+    scripts:
+      - rpmfusion-release-retry.sh
+
+  - type: dnf
+    repos:
+      nonfree: rpmfusion
+    install:
+      allow-erasing: true
+      packages:
+        - ffmpeg
+        - intel-media-driver

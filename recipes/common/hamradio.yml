@@ -1,0 +1,166 @@
+---
+# The ham radio stack. Kept out of recipe.yml and behind `from-file:` for the same
+# reason codecs.yml is: it is the part of this image most likely to break on a
+# Fedora version bump, and it is the part worth depsolving on its own before it is
+# entangled with a compositor and a desktop. recipes/ham-test.yml builds exactly
+# this module and nothing else:
+#
+#     ./build-local.sh recipes/ham-test.yml
+#
+# Package availability was verified against Fedora 44 on 2026-08-25 by repoquery
+# in a clean fedora:44 container, not from memory. Fedora's ham packaging is much
+# better than its reputation — of everything below, only three items needed
+# out-of-repo handling, and they are isolated at the bottom of this file.
+modules:
+  # ---------------------------------------------------------------- native RPMs
+  - type: dnf
+    install:
+      packages:
+        # -- rig control -------------------------------------------------------
+        # hamlib ships rigctl/rigctld/rotctl in the MAIN package; there is no
+        # hamlib-utils subpackage in Fedora (checked — the name does not exist).
+        # rigctld is the hub nearly everything else here talks CAT through, so a
+        # single daemon owns the serial port instead of six apps fighting over it.
+        - hamlib
+        - flrig                    # GUI rig control; also serves an XML-RPC CAT
+                                   # endpoint fldigi/WSJT-X can share
+
+        # -- weak signal digital ----------------------------------------------
+        - wsjtx                    # FT8/FT4/JT65/WSPR
+        - js8call                  # JS8 keyboard-to-keyboard
+        # GridTracker is NOT here. It is packaged nowhere — not Fedora, not RPM
+        # Fusion, not Flathub (all three checked 2026-08-25). Upstream ships an
+        # NW.js tarball/AppImage aimed at $HOME. That makes it a dotfiles-bootstrap
+        # item under the same rule that keeps brew and SDKMAN out of this image,
+        # not something to bake. See DESIGN §6.
+
+        # -- fldigi suite ------------------------------------------------------
+        - fldigi                   # the modem: PSK31, RTTY, Olivia, MFSK, ...
+        - flmsg                    # ICS/ARES forms over fldigi
+        - flamp                    # file transfer over fldigi
+        # flwrap is NOT in Fedora 44 (checked). Not worth an external repo.
+        - qsstv                    # SSTV / DSSTV
+
+        # -- packet / APRS / Winlink -------------------------------------------
+        - direwolf                 # software TNC (AX.25, APRS, KISS)
+        - ax25-tools               # AX.25 kernel stack userland
+        - ax25-apps
+        - libax25
+        - xastir                   # APRS mapping
+        # Pat (Winlink) is installed further down — Go binary, no RPM anywhere.
+
+        # -- SDR ---------------------------------------------------------------
+        - rtl-sdr                  # librtlsdr + rtl_test/rtl_fm + the udev rules
+        - SoapySDR                 # vendor-neutral SDR abstraction
+        - soapy-rtlsdr             # Soapy <-> RTL bridge (this is the module name;
+                                   # `soapysdr-module-rtlsdr` does not exist here)
+        - soapy-airspyhf
+        - gqrx                     # general-purpose receiver
+        - sdrpp                    # SDR++
+        - sdrangel                 # multi-mode SDR workbench
+        - rtl-433                  # 433 MHz ISM decoder
+        # sdrtrunk is installed further down — Java, no RPM anywhere.
+
+        # -- logging / awards --------------------------------------------------
+        # QLog is THE logger for this machine, not a suggestion: it is what the
+        # Windows install already runs (0.50.0), it is Qt and cross-platform, and
+        # Fedora 44 carries 0.52.0 — a NEWER build than the one being migrated
+        # from. Its on-disk format is SQLite + ADIF, so the move is an import, not
+        # a conversion. Checked 2026-08-25.
+        - qlog
+        # CQRLOG and KLog are kept as second opinions for ADIF wrangling. NOTE
+        # THE COST OF CQRLOG: it pulls in mariadb-server (~78 MiB installed) as a
+        # hard dependency, because it stores its log in a local MySQL instance.
+        # That is a whole database daemon riding along for a backup logger — if
+        # QLog proves out, dropping cqrlog is the single biggest easy win in this
+        # file.
+        - cqrlog
+        - klog                     # lighter second logger / ADIF wrangler
+        - trustedqsl               # LoTW signing. The BINARY is `tqsl`; the
+                                   # PACKAGE is `trustedqsl`. Asking dnf for
+                                   # `tqsl` fails.
+
+        # -- radio programming -------------------------------------------------
+        # CHIRP. THE GUI IS IN A SUBPACKAGE. Plain `chirp` installs /usr/bin/chirpc
+        # (CLI) and nothing else — the wxPython GUI at /usr/bin/chirp is owned by
+        # `chirp+wx`. This is the single easiest mistake to make in this file: the
+        # build stays green and the machine has no CHIRP window.
+        - chirp+wx
+
+        # -- satellites / misc -------------------------------------------------
+        - gpredict                 # satellite tracking + doppler, drives rotctld
+        - tlf                       # contest logger (curses)
+
+        # -- serial / USB plumbing --------------------------------------------
+        # Nearly every radio interface on this desk is a USB serial bridge; these
+        # are the ones whose absence shows up as "the radio just does not appear".
+        - picocom                  # first thing to reach for on a CAT port
+        - minicom                  # heavier alternative when picocom is not enough
+        - setserial
+        - usbutils                 # lsusb, for the same reason
+
+  # ------------------------------------------------------------------- Wine
+  # For the RT Systems radio programmers, which are Windows-only paid apps that
+  # drive a USB serial cable. This is the least certain thing in the image and is
+  # deliberately called out rather than buried:
+  #
+  #   * Wine's serial support works by symlinking a host tty into the prefix's
+  #     dosdevices (ln -s /dev/ttyUSB0 ~/.wine/dosdevices/com1). It is fine for
+  #     plain reads/writes and historically weak on control-line games (DTR/RTS
+  #     toggling, non-standard baud rates) — which is exactly what a radio cloning
+  #     cable does. Whether a given RT Systems title works is a per-title question
+  #     that cannot be answered from here.
+  #   * RT Systems cables are usually FTDI or Prolific; the kernel driver is the
+  #     easy half. Getting the app to see COM1 is the half that fails.
+  #   * If a title turns out not to work under Wine, the honest answer is a small
+  #     Windows VM with USB passthrough, not more Wine tuning. Do not let this
+  #     package list imply the problem is solved — it is not yet tested.
+  #
+  # ON wine-core.i686 — READ THIS BEFORE REMOVING IT, AND BEFORE TRUSTING IT.
+  #
+  # The obvious-sounding reason to list it is wrong, and was written into this
+  # file before being checked. It is NOT true that 32-bit Windows apps fail
+  # without it. Fedora 44's wine-core.x86_64 ships the new-WoW64 layout —
+  # verified by rpm -ql inside the built image, 2026-08-25:
+  #
+  #     wine-core.x86_64  ->  wine/i386-windows      (827 32-bit PE DLLs)
+  #                           wine/x86_64-unix       (64-bit host loader)
+  #     wine-core.i686    ->  wine/i386-unix         (32-bit host loader)
+  #                           wine/i386-windows
+  #
+  # So the 64-bit package ALONE already runs 32-bit Windows binaries: the PE side
+  # is 32-bit and the unix side is 64-bit. That is what new WoW64 is.
+  #
+  # What the i686 package actually adds is the CLASSIC 32-bit host loader
+  # (i386-unix). It matters only for apps that need genuinely native 32-bit host
+  # libraries — 32-bit OpenGL being the usual example — or that trip over a
+  # new-WoW64 gap.
+  #
+  # It is kept, for now, as INSURANCE, and the cost is not small: naming it takes
+  # the transaction from ~120 packages to 733, of which 195 are i686. Whether the
+  # RT Systems programmers need it is an open question that cannot be answered
+  # from here — they are per-radio paid Windows apps and nobody has run one under
+  # either mode yet. If they turn out to work under plain new WoW64, DROP THIS
+  # LINE; 195 packages of multilib is a lot to carry for insurance nobody claims.
+  # See DESIGN §"Open questions".
+  - type: dnf
+    install:
+      packages:
+        - wine
+        - wine-core.i686
+        - winetricks
+
+  # ------------------------------------------- out-of-repo: sdrtrunk and Pat
+  # Two things this stack needs that are packaged nowhere. Both are installed by
+  # scripts into /opt and /usr/bin with a PINNED VERSION AND SHA256, so a build is
+  # reproducible and picking up a new upstream release is an explicit edit that
+  # shows in a diff — never a silent "whatever :latest happens to be today".
+  #
+  # This is the same instinct as pinning the GitHub action to a SHA rather than a
+  # tag: these fetch code over the network into the image at build time, and the
+  # image is signed afterwards. An unpinned fetch means the signature attests to
+  # something nobody chose.
+  - type: script
+    scripts:
+      - install-sdrtrunk.sh
+      - install-pat.sh

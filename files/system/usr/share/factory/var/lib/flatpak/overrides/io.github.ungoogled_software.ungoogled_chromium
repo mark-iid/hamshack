@@ -1,0 +1,16 @@
+[Context]
+# !~/.local/share/applications — the manifest grants this with :create, letting
+# the browser write .desktop files onto the host. That is a well-known flatpak
+# sandbox escape: a .desktop entry runs OUTSIDE the sandbox when launched, so
+# anything that can write one can arrange host code execution at the next click.
+#
+# !/tmp — host /tmp is shared with every other process on the system; a browser
+# has no reason to read or write it.
+#
+# COST: "Create shortcut…" / PWA install no longer works. `~/.local/share/icons`
+# is deliberately left alone — with the .desktop path revoked, PWA install is
+# already broken, so revoking icons too would buy nothing.
+#
+# VERIFIED: Chromium launches and maps a window with these applied (it is slow to
+# start, ~50s, which is normal for it and not a symptom).
+filesystems=!/tmp;!~/.local/share/applications;

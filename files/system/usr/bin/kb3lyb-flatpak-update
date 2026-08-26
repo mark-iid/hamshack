@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# kb3lyb-flatpak-update — run `flatpak update` for one scope, but only once the
+# network is actually usable, and report failure honestly (DESIGN §5).
+#
+# Usage: kb3lyb-flatpak-update --system | --user
+#
+# WHY THIS EXISTS. `flatpak update` on its own is not safe to drive from a timer,
+# for two separate reasons that both produce a GREEN unit and no updates:
+#
+#   1. It treats a failed remote metadata fetch as NON-FATAL for anything already
+#      installed. If it can't read flathub's ref list it prints one
+#        "Warning: Treating remote fetch error as non-fatal since <ref> is already
+#         installed: No such ref '<ref>' in remote flathub"
+#      per installed ref, concludes "Nothing to update.", and EXITS 0. Nothing is
+#      updated and systemd sees success. No SuccessExitStatus tuning can catch
+#      this, because the exit code really is 0.
+#
+#   2. On a laptop the daily slot is usually missed while suspended, so
+#      Persistent=true fires the catch-up run the instant the machine wakes —
+#      ahead of wifi association. Observed 2026-08-16: resume at 13:55:40,
+#      NetworkManager still CONNECTED_LOCAL at :41, flatpak ran and gave up at
+#      :41. network-online.target does NOT help: it was already satisfied back at
+#      boot and is not re-armed across suspend.
+#
+# So: wait for real connectivity first, retry a metadata-blind run, and exit
+# nonzero if every attempt came back blind.
+set -uo pipefail
+
+SCOPE="${1:-}"
+case "$SCOPE" in
+    --system|--user) ;;
+    *) echo "usage: ${0##*/} --system|--user" >&2; exit 2 ;;
+esac
+
+# Overridable so the retry/failure path can be exercised without waiting minutes;
+# the units never set these.
+ATTEMPTS="${KB3LYB_FPU_ATTEMPTS:-3}"
+BACKOFF="${KB3LYB_FPU_BACKOFF:-30}"          # seconds, doubled each retry
+ONLINE_TIMEOUT="${KB3LYB_FPU_ONLINE_TIMEOUT:-60}"  # wait for NM to report connectivity
+
+# Wait for connectivity. Deliberately NOT fatal on timeout: nm-online only knows
+# about NetworkManager-managed links, and a tethered//unmanaged path would time
+# out here while the update would have worked fine. The retry loop below is what
+# actually enforces correctness, so a timeout just means "stop waiting, try it".
+if [ -x /usr/bin/nm-online ]; then
+    if ! /usr/bin/nm-online -q -t "$ONLINE_TIMEOUT"; then
+        echo "kb3lyb-flatpak-update: nm-online timed out after ${ONLINE_TIMEOUT}s; attempting anyway" >&2
+    fi
+fi
+
+# How many refs are installed in this scope. Used to tell a metadata-blind run
+# (essentially EVERY ref unresolvable) apart from an app legitimately delisted
+# from Flathub (one or two unresolvable, which must NOT fail the unit — that
+# would be permanent red for a condition nothing can fix).
+installed_refs() {
+    flatpak list "$SCOPE" --columns=ref 2>/dev/null | grep -c . || true
+}
+
+n_installed="$(installed_refs)"
+out="$(mktemp)"
+trap 'rm -f "$out"' EXIT
+
+rc=1
+for attempt in $(seq 1 "$ATTEMPTS"); do
+    # tee so the normal flatpak output still lands in the journal verbatim.
+    flatpak update "$SCOPE" --noninteractive --assumeyes 2>&1 | tee "$out"
+    rc="${PIPESTATUS[0]}"
+
+    # Count DISTINCT refs flatpak could not resolve in the remote.
+    n_blind="$(grep -o "No such ref '[^']*'" "$out" | sort -u | grep -c . || true)"
+
+    blind=0
+    if [ "$n_blind" -gt 0 ] && [ "$n_installed" -gt 0 ] \
+       && [ $(( n_blind * 2 )) -ge "$n_installed" ]; then
+        blind=1
+    fi
+
+    if [ "$rc" -eq 0 ] && [ "$blind" -eq 0 ]; then
+        exit 0
+    fi
+
+    if [ "$blind" -eq 1 ]; then
+        echo "kb3lyb-flatpak-update: metadata-blind run — ${n_blind}/${n_installed} refs unresolvable in the remote (attempt ${attempt}/${ATTEMPTS})" >&2
+    else
+        echo "kb3lyb-flatpak-update: flatpak exited ${rc} (attempt ${attempt}/${ATTEMPTS})" >&2
+    fi
+
+    if [ "$attempt" -lt "$ATTEMPTS" ]; then
+        echo "kb3lyb-flatpak-update: retrying in ${BACKOFF}s" >&2
+        sleep "$BACKOFF"
+        BACKOFF=$(( BACKOFF * 2 ))
+    fi
+done
+
+# Every attempt failed or came back blind. Exit nonzero ON PURPOSE: it means the
+# flatpaks in this scope are NOT current, which is exactly what `systemctl
+# --failed` should be telling you. On a laptop that is often off-network this
+# will occasionally be red for a genuinely offline day — that is the accepted
+# trade, and it is true, which the old silent-success behaviour was not.
+echo "kb3lyb-flatpak-update: giving up after ${ATTEMPTS} attempts; ${SCOPE#--} flatpaks are NOT up to date" >&2
+exit 1

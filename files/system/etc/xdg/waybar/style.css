@@ -1,0 +1,35 @@
+* {
+    font-family: "Cantarell", "Symbols Nerd Font", sans-serif;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(26, 27, 38, 0.92);
+    color: #c0caf5;
+}
+
+#workspaces button {
+    padding: 0 8px;
+    color: #7a7f95;
+    background: transparent;
+}
+
+#workspaces button.active {
+    color: #7aa2f7;
+    box-shadow: inset 0 -2px #7aa2f7;
+}
+
+#window { color: #a9b1d6; }
+
+#clock,
+#tray,
+#pulseaudio,
+#network,
+#backlight,
+#battery {
+    padding: 0 10px;
+}
+
+#battery.warning  { color: #e0af68; }
+#battery.critical { color: #f7768e; }

@@ -1,0 +1,20 @@
+[Unit]
+Description=User flatpak update — daily + shortly after login (DESIGN §5)
+
+[Timer]
+# Mirrors flatpak-update.timer's reasoning: daily, plus a catch-up shortly after
+# the session comes up, because Persistent=true only re-runs a *missed* slot.
+#
+# OnStartupSec rather than OnBootSec: in the per-user manager both are measured
+# from when that manager started (i.e. login), so OnStartupSec is the one that
+# says what is actually meant here.
+#
+# 5min, staggered off the system timer's 3min, so a login doesn't kick off two
+# concurrent flatpak pulls competing for the same uplink.
+OnCalendar=daily
+OnStartupSec=5min
+Persistent=true
+RandomizedDelaySec=3min
+
+[Install]
+WantedBy=timers.target

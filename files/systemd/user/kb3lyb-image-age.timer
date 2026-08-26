@@ -1,0 +1,18 @@
+[Unit]
+Description=Daily staleness check on the booted OS image (DESIGN §5)
+
+[Timer]
+# Daily, plus shortly after the session comes up. OnStartupSec (not OnBootSec) is
+# measured from when the per-user manager started, i.e. login — same reasoning as
+# flatpak-update-user.timer.
+#
+# 15min rather than the update timers' 3-5min: this is a check on whether those
+# updates have been landing, so it should run after they have had a chance to,
+# not race them and report on a state they were about to fix.
+OnCalendar=daily
+OnStartupSec=15min
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

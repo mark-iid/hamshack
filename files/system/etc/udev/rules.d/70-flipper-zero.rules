@@ -1,0 +1,30 @@
+# Flipper Zero — hand the USB interfaces to the seat-local user, and keep
+# ModemManager's hands off them.
+#
+# TWO devices, because it enumerates differently per mode:
+#   0483:5740  normal firmware, CDC-ACM -> /dev/ttyACM* (the `?` CLI shell, and
+#              what qFlipper drives for file transfer and updates)
+#   0483:df11  DFU/recovery, the raw STM32 bootloader. NOT a tty, so the
+#              `dialout` group does nothing for it and firmware recovery is
+#              root-only without this rule.
+#
+# uaccess, NOT MODE="0666". Upstream's own 42-flipper.rules opens the DFU node
+# to the world; uaccess instead sets an ACL for whoever is logged in at the
+# local seat. Same access for this machine, none for a background or remote
+# uid. The tag is acted on by 73-seat-late.rules, so this file MUST stay
+# numbered below 73 — renaming it higher silently drops the ACL.
+#
+# ID_MM_DEVICE_IGNORE is not optional here. ModemManager is installed and
+# enabled, and /usr/lib/udev/rules.d/80-mm-candidate.rules tags EVERY tty as a
+# probe candidate, so without this MM opens /dev/ttyACM0 and pushes AT commands
+# at the Flipper for the first seconds after plug-in. The symptom is a port
+# that is busy or answers garbage at exactly the moment you first reach for it.
+#
+# Matched on VID/PID only. Upstream also matches ATTRS{manufacturer}=="Flipper
+# Devices Inc.", which alternative firmware can change. The cost of dropping it
+# is that 0483:5740 is ST's GENERIC virtual-COM id, shared with bare STM32 dev
+# boards — so those get uaccess too. Deliberate: on this machine that is the
+# same person plugging in the same class of hardware, and uaccess never grants
+# more than the seated user.
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", TAG+="uaccess"
