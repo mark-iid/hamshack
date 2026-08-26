@@ -405,10 +405,12 @@ CAT consumer on this rig, and the '710 starves under the combined load — the
 symptom is intermittent hamlib protocol errors in whichever client loses the race,
 not a clean failure. So keep the software side's CAT traffic modest: QLog shipped
 defaults of a 500 ms poll asking for frequency, mode, VFO, RF power, split *and* CW
-key speed, which is far more than this rig wants alongside CATTouch. It is set to
-1000 ms polling frequency and mode only. Re-enable the other reads one at a time if
-you want them, and treat returning protocol errors as the budget being exceeded
-rather than as a broken command.
+key speed. The poll interval is now **1000 ms** (halved from QLog's 500 ms default)
+with **all reads enabled** — the operator wants the full rig readout and accepts the
+CAT load. If intermittent protocol errors return, that is the CAT budget being
+exceeded rather than a broken command, and the lever is this list: drop
+`get_key_speed` and `get_pwr` first (cosmetic), then `get_split`/`get_vfo`, then
+widen the interval to 2000 ms. Do not go back to 500 ms.
 
 The unit carries `--set-conf=dtr_state=OFF,rts_state=OFF`. Per the CAUTION above
 that is a safety setting, not tuning — and rigctld holds the port open the entire
@@ -752,6 +754,13 @@ picking the project up on the shack machine.
   and right for problem 2. Do §6.8 first; reach for i686 only against the SEH
   crash, and expect the 1.23 GB.
 - **The logs need no deduplication.** See §6.7. Do not "tidy" them.
+- **The Nextcloud mount stays enabled at login — deliberate.**
+  `rclone-nextcloud.service` is `enabled`, so `~/Nextcloud` is mounted whenever the
+  machine is up and networked. That means the cosign signing key at
+  `~/Nextcloud/Documents/keys/` is reachable at a fixed path all the time, not only
+  when deliberately mounted. The operator weighed that and chose convenience —
+  building and signing needs the key routinely. Do not switch this to manual start
+  as a "hardening" tidy-up.
 - **Passwordless sudo is deliberate — leave it.** `/etc/sudoers.d/99-nopasswd`
   survives from the remote-setup session and is confirmed still active. The
   operator has chosen to keep it. Do not "harden" this away.
