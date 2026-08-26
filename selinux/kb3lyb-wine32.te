@@ -1,0 +1,39 @@
+# 32-bit Wine on a bootc/composefs root.
+#
+# THE PROBLEM. Running any 32-bit Windows PE under Wine fails on this image with:
+#
+#   avc: denied { execmod } for comm="cmd.exe"
+#        tcontext=system_u:object_r:lib_t:s0 tclass=file
+#
+# 64-bit PE binaries are unaffected. 32-bit PE DLLs need text relocations, so Wine
+# maps their .text writable-then-executable, which is the `execmod` permission.
+#
+# WHY THE OBVIOUS EXPLANATIONS ARE WRONG. Wine itself runs as unconfined_t
+# (verified with ps -Z), and selinuxuser_execmod is already on — so the accessing
+# process is permitted. The denial is reported against kernel_t, which is not any
+# user domain, and no user-facing boolean affects it.
+#
+# The reason is composefs. `/` here is an overlay whose data lives in the ostree
+# object store (note the denied path is an object path like /d8/a9f1....file).
+# Overlayfs performs the backing-file permission check with the MOUNTER's
+# credentials, and the bootc-mounted root is mounted by kernel_t. So the subject of
+# the check is the mounter, not Wine. This is why 32-bit Wine works on ordinary
+# Fedora and fails here: it is a property of the image's root filesystem.
+#
+# Corollary: adding wine-core.i686 back does NOT fix this, though SETUP §9 once
+# suggested trying that first. The denial is on the PE files' label, not the loader.
+#
+# SCOPE. This grants execmod on lib_t, i.e. all of /usr/lib64, rather than only
+# Wine's i386-windows directory. That breadth is not desired — it is forced. The
+# narrow fix is to relabel just Wine's 32-bit PE files to a dedicated type, but
+# /usr is read-only composefs, so no runtime chcon/restorecon can apply a label
+# there; it has to be done at image build. Until then this is the working fix.
+module kb3lyb-wine32 1.0;
+
+require {
+    type kernel_t;
+    type lib_t;
+    class file execmod;
+}
+
+allow kernel_t lib_t:file execmod;
