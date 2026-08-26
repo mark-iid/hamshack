@@ -1,20 +1,29 @@
-# kb3lyb-shack greeter (DESIGN §2: greetd + tuigreet).
-# The session command is /usr/bin/kb3lyb-greeter, a thin wrapper that paints the
-# whole VT Norton blue (redefines console palette color 0) and then execs tuigreet
-# with the Norton Utilities palette (blue field, light-cyan borders, light-yellow
-# highlights, white text) to match the KB3LYB / markearnest.net presentation style.
-# tuigreet launches `niri --session` — niri as a proper session (imports env, brings
-# up graphical-session.target) so pipewire/portals/user services come up correctly.
+# kb3lyb-shack greeter.
 #
-# The big login font comes from /etc/vconsole.conf (latarcyrheb-sun32), not here.
+# The session command is niri running a GREETER-ONLY config, which spawns
+# gtkgreet. It is not tuigreet, and the reason is a monitor:
 #
-# LOGIN-CRITICAL: a bad greetd command breaks login. The wrapper's color step is
-# guarded and `exec tuigreet` is unconditional, but verify on the machine after
-# upgrading and roll back to the previous deployment from the boot menu if it fails.
+#   tuigreet runs on a VT, and the kernel's fbdev layer clones the console to
+#   EVERY connected output. greetd has no output concept, so there is no setting
+#   that keeps the login screen on one screen. This machine has two monitors and
+#   sits at the greeter for long stretches.
+#
+#   A Wayland compositor has a real output model. /etc/niri/greeter.kdl turns
+#   DP-3 off, so the greeter appears on HDMI-A-1 alone and the second panel
+#   genuinely powers down (verified: dpms=Off, enabled=disabled).
+#
+# LOGIN-CRITICAL. If niri or gtkgreet is broken, there is no graphical login.
+# The fallback is /usr/bin/kb3lyb-greeter, which is still shipped precisely for
+# this — it is a plain VT greeter with no Wayland dependency:
+#
+#   command = "/usr/bin/kb3lyb-greeter"
+#
+# Swap that line in, restart greetd, and you are back on tuigreet. tty2 also has
+# an ordinary login, and sshd is enabled, so a broken greeter is never a lockout.
 
 [terminal]
 vt = 1
 
 [default_session]
-command = "/usr/bin/kb3lyb-greeter"
+command = "niri --config /etc/niri/greeter.kdl"
 user = "greetd"

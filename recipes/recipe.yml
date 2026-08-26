@@ -64,7 +64,15 @@ modules:
         - wmctrl
         # greeter
         - greetd
+        # tuigreet is NOT the active greeter any more — /etc/greetd/config.toml
+        # runs niri + gtkgreet so the login screen can be confined to one
+        # monitor. It stays installed because /usr/bin/kb3lyb-greeter is the
+        # documented fallback when the Wayland greeter breaks, and a fallback
+        # that needs a rebuild to reach is not a fallback.
         - tuigreet
+        # gtkgreet — the actual greeter, run under a greeter-only niri config.
+        # GTK3, styled from /etc/greetd/gtkgreet.css in the Norton palette.
+        - gtkgreet
         # bar / notifications / launcher / lock
         - waybar
         - mako

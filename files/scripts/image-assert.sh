@@ -193,8 +193,27 @@ fi
 # the binary it POINTS AT is precisely the class of bug this file exists to catch.
 #
 # So: parse the command out of the config and verify it is executable.
-assert_file_has "greetd configured as the display manager" \
-  /etc/greetd/config.toml 'tuigreet'
+# The greeter is niri + gtkgreet, not tuigreet — see the config header for why.
+assert_file_has "greetd runs the niri greeter config" \
+  /etc/greetd/config.toml 'niri --config /etc/niri/greeter.kdl'
+assert "greeter niri config present"     test -r /etc/niri/greeter.kdl
+assert "greeter stylesheet present"      test -r /etc/greetd/gtkgreet.css
+assert "gtkgreet installed"              command -v gtkgreet
+# The whole reason for the Wayland greeter: it must confine itself to one output.
+# If this line is ever lost the greeter silently returns to both monitors.
+assert_file_has "greeter config turns the secondary output off" \
+  /etc/niri/greeter.kdl 'off'
+# The greeter config names connectors. niri IGNORES an output block for a
+# connector that is not present, so a stale name here fails silently — exactly
+# how the old DP-1/DP-2 placeholders survived until the machine existed.
+assert_file_has "greeter config names the real primary connector" \
+  /etc/niri/greeter.kdl 'HDMI-A-1'
+# tuigreet + its wrapper stay as the documented fallback. A fallback that needs a
+# rebuild to reach is not a fallback.
+assert "tuigreet fallback still installed"        command -v tuigreet
+assert "kb3lyb-greeter fallback still installed"  test -x /usr/bin/kb3lyb-greeter
+# Parses the FIRST word of the command, which is the executable whether the line
+# is a bare path (kb3lyb-greeter) or a command with arguments (niri --config ...).
 GREET_CMD=$(sed -n 's/^[[:space:]]*command[[:space:]]*=[[:space:]]*"\([^ "]*\).*/\1/p' \
   /etc/greetd/config.toml | head -1)
 if [ -n "$GREET_CMD" ] && { [ -x "$GREET_CMD" ] || command -v "$GREET_CMD" >/dev/null 2>&1; }; then

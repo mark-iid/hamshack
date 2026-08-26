@@ -85,6 +85,25 @@ layout {
 // network/bluetooth tray applets. waybar's tray module stays empty without an SNI
 // provider running; `nm-applet --indicator` uses the StatusNotifierItem path that
 // waybar understands (plain `nm-applet` would try the dead XEmbed tray instead).
+// Wallpaper. swaybg comes from the sway-atomic base, so nothing is layered for
+// this, and it covers EVERY output by default — which is what is wanted here,
+// since the two panels differ in aspect (1920x1080 and 1600x900). `-m fill`
+// crops to fit rather than stretching, so neither is distorted.
+//
+// Run through `sh -c` because niri spawns via execvp with no shell, so $HOME
+// would not expand otherwise.
+//
+// The IMAGE is not baked into the OS image, deliberately: a wallpaper is a
+// personal preference that changes often, and baking it would mean a 13 GB
+// rebuild to change a picture. The path points into $HOME, so dotfiles (or just
+// dropping a different file at that path) override it with no rebuild. If the
+// file is absent, swaybg exits and the desktop is simply plain — harmless.
+//
+// NOTE the file is a LOCAL copy, not the Nextcloud original. Pointing this at a
+// network mount would mean no wallpaper whenever the mount is late or down, and
+// niri starts long before any user mount is ready.
+spawn-at-startup "sh" "-c" "swaybg -i \"$HOME/Pictures/wallpapers/digital-security-lock-uhd-4k-wallpaperdark.jpg\" -m fill"
+
 spawn-at-startup "xwayland-satellite"
 spawn-at-startup "waybar"
 spawn-at-startup "mako"

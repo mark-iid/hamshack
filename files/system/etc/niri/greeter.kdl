@@ -1,0 +1,52 @@
+// kb3lyb-shack — niri configuration used ONLY as the greetd greeter compositor.
+//
+// Why niri and not cage: niri is already in the image, and its output model is
+// what this file exists for. The console (tuigreet on a VT) clones to every
+// connected display and greetd cannot influence that — it is kernel fbdev
+// behaviour. A Wayland compositor has real outputs, so keeping the greeter on
+// one monitor is one line.
+//
+// LOGIN-CRITICAL. If this file is wrong, there is no graphical login. The
+// fallback is to point /etc/greetd/config.toml back at /usr/bin/kb3lyb-greeter,
+// which is a plain VT greeter and cannot depend on this.
+
+// The whole point: the greeter appears on HDMI-A-1 only.
+output "HDMI-A-1" {
+    scale 1
+    position x=0 y=0
+}
+
+output "DP-3" {
+    off
+}
+
+// KNOWN FAILURE MODE, recorded so it is not a mystery later: if HDMI-A-1 is
+// unplugged, this config has no enabled output and there is NO GREETER AT ALL —
+// a black screen, with nothing logged that explains it. It is recoverable
+// (tty2 has an ordinary login, and sshd is enabled), not a lockout. If the
+// monitors are ever rearranged, update the two output blocks above first.
+
+// No bar, no notifications, no polkit agent — this session exists to draw one
+// window and then exit.
+//
+// gtkgreet runs, and when it finishes (successful login, or the user quits) niri
+// is told to quit so greetd sees its command exit and can start the real
+// session. Without the second half of this, niri would keep running after login
+// and greetd would hang forever.
+spawn-at-startup "sh" "-c" "gtkgreet -l -s /etc/greetd/gtkgreet.css; niri msg action quit --skip-confirmation"
+
+prefer-no-csd
+
+cursor {
+    xcursor-size 24
+}
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+binds {
+    // Deliberately minimal. A greeter should not offer a way to escape into the
+    // machine, so there is no spawn binding here at all.
+    Mod+Shift+E { quit skip-confirmation=true; }
+}

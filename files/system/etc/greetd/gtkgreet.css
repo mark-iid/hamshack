@@ -1,0 +1,92 @@
+/* kb3lyb-shack greeter styling — the Norton Utilities palette, taken from the
+ * markearnest.net norton theme rather than eyeballed:
+ *
+ *   #000080  navy       field background
+ *   #5555ff  bright blue  panel borders / bevel
+ *   #00ffff  cyan       labels and accents
+ *   #ffffff  white      body text and input
+ *   #ffff00  yellow     focus highlight
+ *
+ * These are the same five colours kb3lyb-greeter feeds tuigreet via the console
+ * palette, so the VT fallback and this Wayland greeter look like the same
+ * machine. GTK3 selectors — gtkgreet links libgtk-3.
+ */
+
+/* The whole field. gtkgreet with --layer-shell covers the output, so this is
+ * what replaces the default bright white. */
+window, .background {
+  background-color: #000080;
+  color: #ffffff;
+  font-family: "Symbols Nerd Font", monospace;
+  font-size: 12pt;
+}
+
+/* The login panel: a raised DOS-style box. GTK has no double-line border, so a
+ * solid bright-blue border plus a black drop shadow approximates the bevel. */
+box.horizontal, box.vertical, grid, .frame {
+  background-color: #000080;
+  color: #ffffff;
+}
+
+entry, button, .clock {
+  border-radius: 0;               /* nothing in 1991 had rounded corners */
+}
+
+label {
+  color: #00ffff;
+  font-family: monospace;
+}
+
+/* Username / password fields: white on navy, bright-blue box. */
+entry {
+  background-color: #000080;
+  background-image: none;
+  color: #ffffff;
+  border: 2px solid #5555ff;
+  padding: 6px 10px;
+  caret-color: #00ffff;
+  box-shadow: none;
+}
+
+entry:focus {
+  border-color: #ffff00;
+  outline: none;
+}
+
+entry selection {
+  background-color: #5555ff;
+  color: #ffffff;
+}
+
+/* Buttons and the session dropdown. */
+button, combobox button {
+  background-color: #000080;
+  background-image: none;
+  color: #00ffff;
+  border: 2px solid #5555ff;
+  padding: 6px 14px;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+button:hover, combobox button:hover {
+  background-color: #5555ff;
+  color: #ffffff;
+}
+
+button:active, button:checked {
+  background-color: #00ffff;
+  color: #000080;
+}
+
+/* The clock gtkgreet draws. */
+.clock {
+  color: #00ffff;
+  font-family: monospace;
+  font-size: 22pt;
+}
+
+/* Error text — the one place red belongs. */
+.error, label.error {
+  color: #ff0000;
+}
