@@ -420,11 +420,71 @@ Timestamped tags are published alongside `latest` for pinning.
 
 ---
 
-## 9. Open follow-ups
+## 9. Where this stands, and what is still open
 
-Tracked in DESIGN §6. The two worth doing first, because both can *delete* work:
+Current as of 2026-08-26. This section is the handoff: read it first if you are
+picking the project up on the shack machine.
 
-1. **Try CHIRP on the DR-CS25 and KG-UV96.** If it handles them, the entire Wine
-   dependency and 195 i686 packages come out of the recipe.
-2. **Try the RT Systems programmers under plain new-WoW64** (drop
-   `wine-core.i686`, rebuild, test). If they work, drop the line permanently.
+### Done
+
+- Image builds, signs, and publishes. `ghcr.io/mark-iid/kb3lyb-shack:latest`.
+- Installed on the EliteDesk from an interactive Anaconda ISO.
+- Rebased off the installer's `localhost/` origin onto the registry (§6.0).
+- All six USB serial cables enumerate with in-tree drivers — the RT Systems
+  CT29F on `ftdi_sio`, two FT232Rs, both CP2105 interfaces on `cp210x`, a CH340
+  on `ch341-uart`. No udev rules needed.
+- Groups fixed (§6.1 — and read that warning, it is not the obvious command).
+- Logs backed up off the Windows install: 5,804-QSO Log4OM ADIF, WSJT-X data,
+  fldigi/NBEMS, RT Systems `.dat` files, Log4OM SQLite, N1MM, HRD, Winlink.
+
+### Answered, so nobody re-investigates them
+
+- **CHIRP cannot replace the RT Systems programmers.** Checked against the
+  installed CHIRP 0.4.0 and its 528 models: the Alinco **DR-CS25** and Wouxun
+  **KG-UV96** are both absent. Model names confirmed from the programmers' own
+  DLL version resources. Wine is load-bearing, not optional.
+- **`wine-core.i686` was dropped and that is fine.** Fedora 44's
+  `wine-core.x86_64` ships new-WoW64, so 32-bit Windows binaries still run. The
+  i686 package only added the classic `i386-unix` loader, at a cost of 186
+  packages / 1.23 GB. If an RT Systems programmer fails, adding that one line
+  back is the fix — try that before anything else.
+- **The logs need no deduplication.** See §6.7. Do not "tidy" them.
+
+### Genuinely open
+
+1. **Do the RT Systems programmers actually work under Wine?** Untested. The
+   cable side is proven; the app side is not. They are native Win32/MFC
+   (`RadioEngine_V5.exe` + per-radio DLL, linked against `mfc100u`), which is a
+   far better Wine prospect than .NET. The risk is serial control-line handling
+   (DTR/RTS) on a cloning cable, not the GUI.
+2. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
+   N1MM is needed, use a Windows VM — install `org.gnome.Boxes` then, it is
+   deliberately not baked. `not1mm` is the Linux alternative: `pipx install not1mm`.
+3. **niri window rules are unverified.** Run `kb3lyb-check-window-rules` with the
+   ham apps open. The `wine` and `sdrtrunk` patterns are the doubtful ones (§6.4).
+4. **Display connector names in `/etc/niri/config.kdl` are placeholders.** Fix
+   from `niri msg outputs` (§6.3).
+5. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
+   `$HOME` install, deliberately not baked.
+6. **Passwordless sudo** may still be enabled at `/etc/sudoers.d/99-nopasswd`
+   from the remote-setup session. Remove it if you do not want it:
+   `sudo rm /etc/sudoers.d/99-nopasswd`.
+
+### Working on this repo from the shack machine
+
+```bash
+git clone https://github.com/mark-iid/hamshack.git ~/src/kb3lyb
+cd ~/src/kb3lyb
+./build-local.sh recipes/ham-test.yml     # fast: ham stack only
+./build-local.sh                          # full image (~10 min, 13.6 GB)
+```
+
+Pushing needs auth — either `gh auth login` (gh comes from brew, not the image)
+or an SSH key added to GitHub. The build is **rootless**; only `vm/build-iso.sh`
+and `vm/write-usb.sh` need sudo, and building with sudo puts the image in root's
+podman store where `vm/export-image.sh` cannot find it.
+
+The signing key is **not** in the repo (correctly — it is gitignored). It lives at
+`~/Nextcloud/Documents/keys/kb3lyb-shack-cosign.key`, which is reachable once
+Nextcloud is mounted (§6.6b). Do not lose it; the equivalent key for the laptop
+image already was.
