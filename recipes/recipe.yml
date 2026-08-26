@@ -152,6 +152,12 @@ modules:
         - nmap
         - wireshark-cli
         - smartmontools
+        # libva-utils provides `vainfo`, which is the ONLY way to confirm hardware
+        # video decode actually works — it needs the real GPU, so no build-time
+        # check can stand in for it. SETUP §6.2 tells the operator to run vainfo;
+        # shipping that instruction without the binary was a defect, found on the
+        # first real boot.
+        - libva-utils
         - rpi-imager
         # unrar resolves to RPM Fusion's RARLAB build ONLY because the codec module
         # runs first and persists the rpmfusion repos. Reorder the modules and it

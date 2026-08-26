@@ -64,6 +64,11 @@ assert "ffmpeg (RPM Fusion) installed"          rpm -q --quiet ffmpeg
 assert "intel-media-driver installed"           rpm -q --quiet intel-media-driver
 assert "iHD VA-API driver present" \
   test -e /usr/lib64/dri/iHD_drv_video.so
+# The driver being present is not the same as being able to check it. vainfo needs
+# a real GPU, so this build can only guarantee the TOOL exists for the on-machine
+# check in SETUP §6.2.
+assert "vainfo present (libva-utils) — the only way to verify decode on the box" \
+  command -v vainfo
 refute "mesa-va-drivers-freeworld NOT installed (AMD driver, wrong machine)" \
   rpm -q --quiet mesa-va-drivers-freeworld
 

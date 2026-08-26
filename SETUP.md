@@ -147,11 +147,40 @@ Fedora Atomic install already points at the registry.
 
 ### 6.1 Groups — do this first, nothing radio works without it
 
+> [!WARNING]
+> **`usermod -aG dialout` SILENTLY DOES NOTHING on this OS.** It exits 0, prints
+> no error, and the membership is never created. Verified on the first real boot,
+> 2026-08-26.
+>
+> The cause is ostree's split account database. `/etc/group` holds only groups
+> created *locally*; the base system groups live in the read-only
+> `/usr/lib/group`. `usermod` resolves `dialout` through NSS, finds it, believes
+> it succeeded, and writes nothing that persists. `rtlsdr` works — it was created
+> locally by systemd-sysusers, so it has a real `/etc/group` entry — which makes
+> the failure look even more like success, since one of the three groups does get
+> added.
+>
+> Without `dialout` no serial port opens, so every radio on the desk is dead and
+> nothing says why.
+
+Seed the missing groups into `/etc/group` first, then add yourself:
+
 ```bash
-sudo usermod -aG dialout,rtlsdr,audio,kismet "$USER"
-# log out and back in; then confirm:
-id
+for g in dialout audio; do
+  grep -q "^$g:" /etc/group || grep "^$g:" /usr/lib/group | sudo tee -a /etc/group >/dev/null
+  sudo usermod -aG "$g" "$USER"
+done
+sudo usermod -aG rtlsdr "$USER"     # already local; plain usermod is fine
 ```
+
+**Verify — do not assume:**
+
+```bash
+id -nG            # must list dialout, audio, rtlsdr
+grep -E '^(dialout|audio|rtlsdr):' /etc/group   # each line must end with your username
+```
+
+Then log out and back in for the session to pick them up.
 
 - `dialout` — every USB serial CAT/programming cable
 - `rtlsdr` — the group `rtl-sdr`'s udev rules assign to SDR dongles
