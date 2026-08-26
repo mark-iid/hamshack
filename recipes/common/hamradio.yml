@@ -155,11 +155,31 @@ modules:
   # libraries (32-bit OpenGL being the usual example) or that hit a new-WoW64 gap.
   #
   # It was carried briefly as insurance and measured: 186 i686 packages, 1.23 GB.
-  # That is a lot of image for a fallback nobody has yet needed, on a machine with
-  # a 256 GB disk that stores two deployments.
   #
-  # IF an RT Systems programmer fails under new WoW64 — and only then — add
-  # `- wine-core.i686` back here and rebuild. That is the whole fix.
+  # THAT CONDITION HAS NOW BEEN MET, so wine-core.i686 is back below. What happened
+  # on 2026-08-26, in order, because the order is the useful part:
+  #
+  #   1. Every 32-bit PE failed outright — SELinux `execmod` denied on lib_t. That
+  #      is a composefs property, not a Wine one, and i686 does NOT fix it. See
+  #      SETUP §6.8; the fix is the policy module in selinux/kb3lyb-wine32.te.
+  #   2. With that in place the DRCS25 installer ran, drew its MFC GUI, took a
+  #      serial and an install path — then died in
+  #      `err:seh:call_seh_handlers invalid frame`, with addresses above 4 GB in a
+  #      32-bit process. That is a new-WoW64 exception-handling gap, exactly the
+  #      case the note above says the classic loader is insurance against.
+  #   3. `WINEARCH=win32` is refused outright without it: "not supported in wow64
+  #      mode". So a pure 32-bit prefix — the way round the WoW64 SEH path — cannot
+  #      even be created unless this package is present.
+  #
+  # Local `rpm-ostree install wine-core.i686` does NOT work as a shortcut: it pulls
+  # 32-bit libva -> 32-bit mesa-libGL, which collides with the base image's pinned
+  # mesa-libGL. Layering resolves against the repos while the base is fixed, so the
+  # two cannot agree. In an image BUILD the whole transaction resolves together,
+  # which is why this belongs here and not on the machine.
+  #
+  # Cost is real: expect ~186 extra packages / ~1.23 GB on a 256 GB disk holding two
+  # deployments. If the programmers ultimately prove unworkable and the answer turns
+  # out to be a Windows VM, delete this line again — do not leave it out of inertia.
   - type: dnf
     install:
       exclude:
@@ -168,6 +188,7 @@ modules:
       packages:
         - wine
         - winetricks
+        - wine-core.i686
 
   # ------------------------------------------- out-of-repo: sdrtrunk and Pat
   # Two things this stack needs that are packaged nowhere. Both are installed by
