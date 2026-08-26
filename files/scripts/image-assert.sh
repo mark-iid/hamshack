@@ -79,16 +79,20 @@ assert "chirp GUI binary present (chirp+wx, not plain chirp)" \
 # 32-bit wine loader — rather than for the package name, so this stays true even
 # if Fedora reshuffles subpackages.
 assert "wine installed"                          rpm -q --quiet wine
-# The i686 package's distinguishing contribution is the 32-bit UNIX loader at
-# /usr/lib/wine-wow64/wine/i386-unix. Do NOT check for i386-windows: the x86_64
-# package ships that too (new WoW64), so it would pass with i686 absent and the
-# check would assert nothing. Path verified by rpm -ql inside the built image.
-if [ -d /usr/lib/wine-wow64/wine/i386-unix ]; then
-  pass "wine classic 32-bit host loader present (i386-unix)"
-else
-  fail "wine i386-unix loader MISSING — wine-core.i686 did not install"
-fi
-assert "wine new-WoW64 32-bit PE support present" \
+
+
+# --- The size cuts actually held ---------------------------------------------
+# These exist because an exclude glob that dnf silently ignores looks EXACTLY like
+# one that worked. 900 MB is worth a check.
+refute "proj-data regional grids excluded (764 MB of unused datum grids)" \
+  sh -c 'rpm -qa "proj-data-*" | grep -q .'
+refute "no General MIDI soundfont on a ham radio PC (142 MB)" \
+  rpm -q --quiet fluid-soundfont-gm
+refute "wine 32-bit multilib NOT installed (1.23 GB; new WoW64 covers 32-bit PE)" \
+  rpm -q --quiet wine-core.i686
+# ...but 32-bit Windows support must still be present via new WoW64. This is the
+# check that makes dropping the multilib safe rather than merely smaller.
+assert "wine still runs 32-bit PE via new WoW64" \
   test -e /usr/lib64/wine-wow64/wine/i386-windows/ntdll.dll
 
 # --- Out-of-repo installs landed in the IMAGE, not in /var -------------------
@@ -106,13 +110,20 @@ refute "nothing was written into /var/opt at build time" \
   test -e /var/opt/sdrtrunk
 assert "pat (Winlink) installed"                 test -x /usr/bin/pat
 
+# cqrlog is deliberately absent (it drags in mariadb-server); assert that, so it
+# cannot creep back in as somebody else's dependency without anyone noticing.
+refute "cqrlog NOT installed (would pull mariadb-server onto a shack PC)" \
+  rpm -q --quiet cqrlog
+refute "no mariadb-server in the image" \
+  rpm -q --quiet mariadb-server
+
 # --- The ham stack is actually here ------------------------------------------
 # A spot-check across every group in common/hamradio.yml, so a dropped or renamed
 # package surfaces as a named failure rather than as a missing menu entry weeks
 # later. Binaries, not package names: the binary is what the operator needs.
 for bin in wsjtx js8call fldigi flrig flmsg flamp qsstv direwolf xastir \
            rigctl rigctld rotctld rtl_test rtl_433 gqrx sdrpp sdrangel \
-           cqrlog klog qlog tqsl gpredict picocom socat; do
+           klog qlog tqsl gpredict picocom socat; do
   assert "ham binary present: $bin" command -v "$bin"
 done
 

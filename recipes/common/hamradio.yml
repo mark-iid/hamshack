@@ -15,6 +15,30 @@ modules:
   # ---------------------------------------------------------------- native RPMs
   - type: dnf
     install:
+      # EXCLUDES — 900 MB of weak dependencies that nothing here actually needs.
+      # Measured on the first full build, not guessed:
+      #
+      #   proj-data-*  764 MB of regional cartographic datum grids (US alone is
+      #                319 MB; the rest is the UK, South Africa, Australia,
+      #                Canada, Germany, Denmark, Japan, New Zealand...). They
+      #                arrive because xastir and sdrangel pull `proj`, and the
+      #                grid packages Recommend it back. But those two only ever
+      #                require `libproj.so.25` — the LIBRARY. Checked with
+      #                `rpm -q --requires`. The grids are for survey-grade datum
+      #                transformation; APRS mapping does not touch them.
+      #                proj-data (base, 10 MB) is NOT excluded — the glob needs
+      #                the trailing hyphen, so it does not match.
+      #
+      #   dosbox-staging + fluid-soundfont-gm  158 MB, including a 142 MB General
+      #                MIDI soundfont, on a ham radio PC. A weak dep several hops
+      #                out from the wine/audio stack.
+      #
+      # If something later turns out to need a specific grid, add that ONE package
+      # back rather than deleting the glob.
+      exclude:
+        - proj-data-*
+        - dosbox-staging
+        - fluid-soundfont-gm
       packages:
         # -- rig control -------------------------------------------------------
         # hamlib ships rigctl/rigctld/rotctl in the MAIN package; there is no
@@ -68,13 +92,11 @@ modules:
         # from. Its on-disk format is SQLite + ADIF, so the move is an import, not
         # a conversion. Checked 2026-08-25.
         - qlog
-        # CQRLOG and KLog are kept as second opinions for ADIF wrangling. NOTE
-        # THE COST OF CQRLOG: it pulls in mariadb-server (~78 MiB installed) as a
-        # hard dependency, because it stores its log in a local MySQL instance.
-        # That is a whole database daemon riding along for a backup logger — if
-        # QLog proves out, dropping cqrlog is the single biggest easy win in this
-        # file.
-        - cqrlog
+        # CQRLOG IS DELIBERATELY ABSENT — do not add it back without a reason.
+        # It hard-depends on mariadb-server (~78 MiB installed) because it keeps
+        # its log in a local MySQL instance, so adding it means running a database
+        # daemon on a shack PC for a logger that is not even the primary one.
+        # QLog above is the primary. Dropped by decision, 2026-08-25.
         - klog                     # lighter second logger / ADIF wrangler
         - trustedqsl               # LoTW signing. The BINARY is `tqsl`; the
                                    # PACKAGE is `trustedqsl`. Asking dnf for
@@ -116,38 +138,35 @@ modules:
   #     Windows VM with USB passthrough, not more Wine tuning. Do not let this
   #     package list imply the problem is solved — it is not yet tested.
   #
-  # ON wine-core.i686 — READ THIS BEFORE REMOVING IT, AND BEFORE TRUSTING IT.
+  # WINE, WITHOUT THE 32-BIT MULTILIB STACK — and that is not the limitation it
+  # sounds like. Read this before adding wine-core.i686 back.
   #
-  # The obvious-sounding reason to list it is wrong, and was written into this
-  # file before being checked. It is NOT true that 32-bit Windows apps fail
-  # without it. Fedora 44's wine-core.x86_64 ships the new-WoW64 layout —
-  # verified by rpm -ql inside the built image, 2026-08-25:
+  # Fedora 44's wine-core.x86_64 ships the new-WoW64 layout. Verified by rpm -ql
+  # inside the built image, 2026-08-25:
   #
-  #     wine-core.x86_64  ->  wine/i386-windows      (827 32-bit PE DLLs)
-  #                           wine/x86_64-unix       (64-bit host loader)
-  #     wine-core.i686    ->  wine/i386-unix         (32-bit host loader)
-  #                           wine/i386-windows
+  #     wine-core.x86_64  ->  wine/i386-windows   (827 32-bit PE DLLs)
+  #                           wine/x86_64-unix    (64-bit host loader)
+  #     wine-core.i686    ->  wine/i386-unix      (32-bit host loader)
   #
-  # So the 64-bit package ALONE already runs 32-bit Windows binaries: the PE side
-  # is 32-bit and the unix side is 64-bit. That is what new WoW64 is.
+  # So the 64-bit package ALONE runs 32-bit Windows binaries — the PE side is
+  # 32-bit and the unix side is 64-bit. That is what new WoW64 is. Dropping the
+  # i686 package does NOT remove 32-bit support; it removes the CLASSIC 32-bit
+  # host loader, which matters only for apps needing genuinely native 32-bit host
+  # libraries (32-bit OpenGL being the usual example) or that hit a new-WoW64 gap.
   #
-  # What the i686 package actually adds is the CLASSIC 32-bit host loader
-  # (i386-unix). It matters only for apps that need genuinely native 32-bit host
-  # libraries — 32-bit OpenGL being the usual example — or that trip over a
-  # new-WoW64 gap.
+  # It was carried briefly as insurance and measured: 186 i686 packages, 1.23 GB.
+  # That is a lot of image for a fallback nobody has yet needed, on a machine with
+  # a 256 GB disk that stores two deployments.
   #
-  # It is kept, for now, as INSURANCE, and the cost is not small: naming it takes
-  # the transaction from ~120 packages to 733, of which 195 are i686. Whether the
-  # RT Systems programmers need it is an open question that cannot be answered
-  # from here — they are per-radio paid Windows apps and nobody has run one under
-  # either mode yet. If they turn out to work under plain new WoW64, DROP THIS
-  # LINE; 195 packages of multilib is a lot to carry for insurance nobody claims.
-  # See DESIGN §"Open questions".
+  # IF an RT Systems programmer fails under new WoW64 — and only then — add
+  # `- wine-core.i686` back here and rebuild. That is the whole fix.
   - type: dnf
     install:
+      exclude:
+        - dosbox-staging
+        - fluid-soundfont-gm
       packages:
         - wine
-        - wine-core.i686
         - winetricks
 
   # ------------------------------------------- out-of-repo: sdrtrunk and Pat
