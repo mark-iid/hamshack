@@ -28,9 +28,11 @@ input {
 //
 //     niri msg outputs
 //
-// HDMI-A-1 is the larger panel and sits at the origin; DP-3 is placed to its
-// right at x=1920, which is HDMI-A-1's width. If the physical arrangement is the
-// other way round, swap the two `position` lines — nothing else needs to change.
+// HDMI-A-1 is the larger panel, is the one the operator faces, and sits at the
+// origin. DP-3 is to its LEFT, so DP-3's x is negative — and it is -1600, DP-3's
+// own width, which puts DP-3's right edge on HDMI-A-1's left edge at x=0. That
+// is the rule to redo the arithmetic with if either panel is ever replaced: the
+// left monitor's x is minus its own logical width, not minus the primary's.
 //
 // scale 1 throughout, unlike the laptop's 1.35. These are ordinary ~96 DPI desk
 // monitors, and most of this image's GUI is Xwayland (fldigi is FLTK, chirp+wx is
@@ -43,7 +45,9 @@ output "HDMI-A-1" {
 
 output "DP-3" {
     scale 1
-    position x=1920 y=0
+    // Left of HDMI-A-1. y=0 top-aligns the two panels; they differ in height
+    // (1080 vs 900), so the extra 180px falls off the bottom of DP-3.
+    position x=-1600 y=0
 }
 
 // XWayland toolkit-scaling env vars (GDK_SCALE / QT_SCALE_FACTOR / Xft.dpi) are
@@ -185,18 +189,41 @@ window-rule {
 
 // Programming, logging, satellites. chirp+wx is the wxPython GUI — its WM_CLASS
 // has been seen as both "Chirp" and "chirp" across releases, hence the (?i).
+// QLog: always on DP-3 (the secondary head), always filling it. The app's layout
+// — log table, band map, DX cluster, detail pane — is unusable in a half-width
+// column, so it gets the whole output rather than a share of one. open-on-output
+// is silently ignored if DP-3 is absent, so this stays harmless on the laptop.
+// Use open-maximized instead of open-fullscreen if you want waybar kept visible.
 window-rule {
-    match app-id=r#"^(?i)(chirp|klog|qlog|tqsl|gpredict|xastir)$"#
+    match app-id=r#"^QLog$"#
+    open-on-output "DP-3"
+    open-fullscreen true
+}
+
+// qlog was REMOVED from this list on 2026-08-26. It is a modern Qt app with a
+// properly resizable layout and tiles fine; floating it just made it behave
+// unlike every other window. The apps left here genuinely need floating — the
+// rule is about toolkits that break when tiled, not about being ham software.
+window-rule {
+    match app-id=r#"^(?i)(chirp|klog|tqsl|gpredict|xastir)$"#
     open-floating true
 }
 
-// Wine. Every RT Systems programmer arrives as an Xwayland window whose WM_CLASS
-// is derived from the .exe name, so there is no single id to match — but they all
-// carry the literal class "Wine" as their second WM_CLASS field, and niri matches
-// against that. Floating is non-negotiable for these: Win32 apps assume a fixed
+// Wine. Every RT Systems programmer arrives as an Xwayland window whose app-id is
+// derived from the .exe name, so there is no single id to match.
+//
+// VERIFIED 2026-08-26 with the DRCS25 installer open: niri reported its app-id as
+// "drcs25_setup.exe". An earlier version of this rule matched r#"^(?i)wine$"# on
+// the belief that niri matches the second WM_CLASS field (the literal "Wine"). It
+// does not — it reports the INSTANCE name, which is the executable. That rule
+// matched nothing, silently, exactly as kb3lyb-check-window-rules warns.
+//
+// So match the .exe suffix instead, which catches every Wine window whatever the
+// programmer is called. "wine" is kept as an alternative for windows that do
+// report the bare class. Floating is non-negotiable: Win32 apps assume a fixed
 // window they position dialogs relative to.
 window-rule {
-    match app-id=r#"^(?i)wine$"#
+    match app-id=r#"^(?i)(wine|.*\.exe)$"#
     open-floating true
 }
 
