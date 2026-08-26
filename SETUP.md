@@ -358,6 +358,17 @@ Still to capture:
 - [ ] Win4Yaesu / Win4Icom Suite profiles — `Documents\Win4*Suite\`
 - [ ] **The Windows licence/recovery position**, if you ever want IoT LTSC back
 - [ ] `.ssh/`, Tailscale state, anything under `Documents\DXLab`
+- [ ] **Revoke the temporary inventory SSH key.** A throwaway ed25519 key
+      (comment `claude-shack-inventory`) was added to
+      `C:\ProgramData\ssh\administrators_authorized_keys` on 2026-08-25 to take
+      this backup. It dies with the wipe, so this is only outstanding while the
+      Windows install still exists. To remove it early:
+      ```powershell
+      $f='C:\ProgramData\ssh\administrators_authorized_keys'
+      (Get-Content $f) | Where-Object { $_ -notmatch 'claude-shack-inventory' } | Set-Content $f
+      ```
+- [ ] Consider whether the Windows 10 IoT Enterprise LTSC licence/recovery is
+      worth preserving — a plain reinstall will not reproduce it
 
 ---
 
