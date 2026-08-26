@@ -574,6 +574,68 @@ sudo semodule -i /tmp/kb3lyb-wine32.pp
 sudo semodule -l | grep kb3lyb        # verify
 ```
 
+### 6.8b `wine` is NOT the 32-bit entry point — `wine32` is
+
+With `wine-core.i686` in the image (recipe change 2026-08-26), a genuine 32-bit
+prefix is possible — but **only via `/usr/bin/wine32`**:
+
+```bash
+export WINEARCH=win32 WINEPREFIX=~/.local/share/wineprefixes/rt32
+/usr/bin/wine32 wineboot -u        # works -> #arch=win32
+wine wineboot -u                   # FAILS: "not supported in wow64 mode"
+```
+
+`/usr/bin/wine` is a symlink to `/etc/alternatives/wine`, which resolves to
+**`wine64`** — and `alternatives --display wine` prints nothing, i.e. the i686
+package's alternative was never configured. The build log says so out loud
+(`/usr/bin/wine32 has not been configured as an alternative for wine`) and it is
+easy to read past. So plain `wine` refuses win32 prefixes no matter what is
+installed, and the failure message blames wow64 mode rather than the symlink.
+
+Use `wine32` for everything touching a win32 prefix, including winetricks:
+
+```bash
+WINE=/usr/bin/wine32 WINESERVER=/usr/bin/wineserver32 \
+  WINEARCH=win32 WINEPREFIX=~/.local/share/wineprefixes/rt32 \
+  winetricks -q vcrun2010
+```
+
+Verified after the reboot onto the new image: `#arch=win32` prefix created, and
+32-bit `cmd.exe` runs under SELinux **Enforcing**. The `kb3lyb-wine32` policy
+module survives a reboot (it lives in `/etc/selinux`, not in the image).
+
+### 6.8c RT Systems programmers: where this actually got to
+
+**Not working. Two prefixes, two different failures, neither installs.**
+
+| prefix | result |
+|---|---|
+| `~/.local/share/wineprefixes/rtsystems` (win64/WoW64) | reaches language -> serial -> email -> install path, then dies in `err:seh:call_seh_handlers invalid frame` |
+| `~/.local/share/wineprefixes/rt32` (win32) | language dialog -> OK -> spawns four processes -> all exit cleanly, rc=0, **zero errors**, nothing installed |
+
+Both prefixes have `vcrun2010` (the programmers link against `mfc100u`/`msvcr100`).
+
+The win32 result is the informative one: no crash, no exception, no missing DLL —
+just routine `fixme` lines and a clean exit. That is an installer *choosing* to
+stop on some prerequisite check, not Wine failing. Candidates are a cable-presence
+check, an elevation check, or an OS-version check, and there is no error to
+distinguish them. Note it went **backwards**: the win32 prefix, which was supposed
+to be the fix, does not even reach the serial prompt.
+
+Things already ruled out, so nobody repeats them:
+
+- Not the SELinux denial (§6.8) — fixed, and 32-bit runs fine now.
+- Not a missing MFC runtime — `winetricks -q vcrun2010` installed it in both.
+- Not the registration key: porting the `Software\RT Systems V5\...` key from the
+  win64 prefix into the win32 one, and removing it again, changed nothing.
+- Not the GUI/toolkit — the MFC dialogs render and respond correctly.
+
+**Recommendation: stop tuning Wine here.** This is the case §9 and the recipe
+comment both describe — the honest answer is a small Windows VM with USB
+passthrough (`org.gnome.Boxes`, deliberately not baked). An untried data point that
+costs little: run `KGUV96_Setup.exe` and see whether it fails the same way, which
+would say whether this is DRCS25-specific or common to RT Systems' installers.
+
 > [!NOTE]
 > This is **machine-local state the image does not describe** — a fresh install
 > will not have it, and this section is the only record of that. It grants
@@ -710,10 +772,14 @@ picking the project up on the shack machine.
    frame`, and installs nothing. Adding `mfc100u`/`msvcr100` via
    `winetricks -q vcrun2010` did not change the outcome (it changed the crash from
    heap corruption to the SEH abort, which is progress but not a fix).
-   Next lever is `wine-core.i686` + a `WINEARCH=win32` prefix — see the Wine entry
-   above. Only past that does the original question, serial control-line handling
-   (DTR/RTS) on a cloning cable, become answerable at all.
-   Prefix in use: `~/.local/share/wineprefixes/rtsystems`. Installers in `~/Downloads`.
+   `wine-core.i686` is now in the image and a real `WINEARCH=win32` prefix works —
+   **but it did not fix this, and made it worse**: in win32 the installer exits
+   cleanly after the language dialog without reaching the serial prompt. Full
+   detail and everything already ruled out is in §6.8c. The original question,
+   serial control-line handling (DTR/RTS) on a cloning cable, has never been
+   reached. Recommendation there is a Windows VM.
+   Prefixes: `~/.local/share/wineprefixes/rtsystems` (win64), `rt32` (win32).
+   Installers in `~/Downloads`; both are 32-bit.
 2. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
    N1MM is needed, use a Windows VM — install `org.gnome.Boxes` then, it is
    deliberately not baked. `not1mm` is the Linux alternative: `pipx install not1mm`.
