@@ -814,6 +814,46 @@ are set in the GUI.
 Its log is the digital-only file from §6.7: 7,263 records, zero SSB/CW. Do not
 replace it with the 8,584-record original.
 
+### 6.11 QLog DX cluster, and QSSTV frequencies
+
+**Cluster.** QLog wants the server as `[username@]hostname:port`. Configured in
+`~/.config/hamradio/QLog.conf` under `[dxc]`:
+
+```ini
+last_server=KB3LYB@dxc.ve7cc.net:23
+autoconnect=false
+filter/dedup=true
+filter/deduptime=30
+filter/spotter/contregexp=NA
+```
+
+VE7CC runs **CC Cluster**, which has the richest server-side filtering of the common
+nodes — so filtering can be pushed to the server with `set/filter` commands as well
+as done in QLog. Alternatives: `dxc.w3lpl.net:7373` (Glenwood MD, the closest major
+node to Pittsburgh) or `hamqth.com:7300` (QLog's own documented example).
+
+> [!IMPORTANT]
+> **Filter on SPOTTER continent, not DX continent.** `filter/spotter/contregexp=NA`
+> shows only spots *posted by* North American stations, which is a proxy for "someone
+> near me can hear this right now" — i.e. propagation that applies here. Filtering on
+> the **DX** continent instead would hide the DX worth chasing, since rare stations
+> are everywhere. This is the setting that makes a cluster useful rather than a
+> firehose, and it is easy to get backwards.
+
+`autoconnect` is deliberately **false** until a connection is confirmed by hand.
+
+**QSSTV frequencies.** `[FREQSELECT]` in `~/.config/ON4QZ/qsstv_9.0.conf` holds four
+PARALLEL lists — `frequencyList`, `modeList`, `passBandList`, `sbModeList`. Only the
+first and last are set, to the standard SSTV calling frequencies:
+
+| band | 160 | 80 | 40 | 20 | 17 | 15 | 12 | 10 | 6 | 2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MHz | 1.916 | 3.845 | 7.171 | **14.230** | 18.160 | 21.340 | 24.975 | 28.680 | 50.680 | 145.500 |
+
+14.230 is the international calling frequency and the one that is actually busy. USB
+on HF, FM on 6 m and 2 m. If entries are ever added by hand, keep the lists the same
+length — they are positional.
+
 ---
 
 ## 7. Backup checklist — BEFORE wiping
