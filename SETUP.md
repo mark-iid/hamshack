@@ -631,68 +631,69 @@ removed again — see the comment in `recipes/common/hamradio.yml`.
 > and adding `wine-core.i686` will not fix it — that was tried and measured. Check
 > `sudo semodule -l | grep kb3lyb` first.
 
-### 6.8c RT Systems programmers: where this actually got to
+### 6.8c RT Systems programmers — WORKING, via an older Wine in a toolbox
 
-**Not finished. One step remains, and it needs a human at the keyboard.**
+Solved 2026-08-27 after a long detour. The DR-CS25 programmer installs, launches and
+draws its channel grid. Three separate things were wrong; each masked the next.
 
-Three prefixes were tried on 2026-08-26/27. The first two were deleted once they had
-taught what they were going to; only `rtnew` still exists.
-
-| prefix (all had `vcrun2010`) | result |
-|---|---|
-| win64, Windows 10 mode *(deleted)* | reaches language → serial → email → install path, then dies in `err:seh:call_seh_handlers invalid frame` |
-| win32 *(deleted)* | language dialog → OK → four processes spawn and all exit cleanly, rc=0, **zero errors**, nothing installed — it went BACKWARDS |
-| **`rtnew`: win64, winxp mode** | installer starts and **waits for input**. No crash, no silent exit. |
-
-The lesson across those three is that **winxp compatibility mode is what helped**,
-not architecture. The win32 prefix — built specifically to fix this — made it worse,
-which is the evidence that ended the `wine-core.i686` experiment (§6.8b).
-
-Things already ruled out, so nobody repeats them:
-
-- Not the SELinux denial (§6.8) — fixed, and 32-bit runs fine now.
-- Not a missing MFC runtime — `winetricks -q vcrun2010` installed it in both.
-- Not the registration key: porting the `Software\RT Systems V5\...` key between
-  prefixes, and removing it again, changed nothing. (A copy was salvaged to
-  `kb3lyb-backup-20260825/rtsystems/registration-from-wine-prefix.reg` before those
-  prefixes were deleted; the serial is also retrievable from the RT Systems website,
-  so that file is disposable.)
-- Not the GUI/toolkit — the MFC dialogs render and respond correctly.
-
-**Retried 2026-08-26 after VARA succeeded, applying what worked there:** a fresh
-win64 prefix (`~/.local/share/wineprefixes/rtnew`) in **winxp mode** with `vcrun2010`
-and ALSA. In that prefix the installer no longer crashes or silently exits — it
-starts and WAITS for input. That is better than both earlier prefixes, so XP mode
-appears to matter.
-
-It cannot be finished unattended, though. The installer has **no silent mode**:
-`/S` exits doing nothing, and `/silent`, `/VERYSILENT` and `/q` all just show the
-wizard and wait. Unlike VARA's Inno Setup, there is no flag to bypass the GUI, and
-the payload is a proprietary self-extractor that `7z` cannot unpack to reach an
-inner installer. Driving the wizard programmatically does not work either —
-`wtype`'s virtual-keyboard events never reach XWayland clients under niri.
-
-**So the remaining step is a human clicking through the wizard in the `rtnew`
-prefix.** That is a few minutes of work, not an unsolved problem:
+#### The recipe
 
 ```bash
-WINEPREFIX=~/.local/share/wineprefixes/rtnew wine ~/Downloads/DRCS25_Setup.exe
+toolbox create --distro fedora --release 41 --assumeyes wine41
+toolbox run -c wine41 sudo dnf install -y wine winetricks      # gets wine 10.15
+
+export P=~/.local/share/wineprefixes/rt-w10                    # NO WINEARCH
+toolbox run -c wine41 env WINEPREFIX=$P wine wineboot -u
+toolbox run -c wine41 env WINEPREFIX=$P winetricks -q win7 sound=alsa vcrun2010 mfc42
+toolbox run -c wine41 env WINEPREFIX=$P wine ~/Downloads/DRCS25_Setup.exe
+toolbox run -c wine41 env WINEPREFIX=$P wine regsvr32 'C:\windows\syswow64\FPSPRU80.ocx'
+
+ln -sfn /dev/serial/by-id/usb-RT_Systems_CT29F_Radio_Cable_RTA04P95-if00-port0 \
+        $P/dosdevices/com1
+
+toolbox run -c wine41 env WINEPREFIX=$P \
+  wine 'C:\RT Systems V5\Alinco\DRCS25_V5\RadioEngine_V5.exe'
 ```
 
-**If that still fails, stop tuning Wine here.** This is the case §9 and the recipe
-comment both describe — the honest answer is a small Windows VM with USB
-passthrough (`org.gnome.Boxes`, deliberately not baked). An untried data point that
-costs little: run `KGUV96_Setup.exe` and see whether it fails the same way, which
-would say whether this is DRCS25-specific or common to RT Systems' installers.
+#### The three problems, in the order they have to be solved
 
-> [!NOTE]
-> This is **machine-local state the image does not describe** — a fresh install
-> will not have it, and this section is the only record of that. It grants
-> `execmod` on all of `lib_t`, which is broader than wanted. The narrow fix is to
-> relabel only Wine's `i386-windows` files, but `/usr` is read-only composefs, so
-> that cannot be done at runtime and has to happen at image build. Bake it once
-> the programmers are known to work; there is no point hardening a path that may
-> yet be abandoned for a Windows VM.
+1. **SELinux `execmod`** (§6.8) blocks every 32-bit PE. Machine-wide, still needed —
+   VARA depends on it too.
+2. **Wine 11.0 corrupts its own heap** during the installer's file-copy stage:
+   `free(): invalid size`, which is *glibc's* message, not Wine's. Reproduced under
+   Windows 10, XP and 7 compatibility modes — the mode changes how far it gets, never
+   whether it fails. **Wine 10.15 does not have this bug.** That is the whole reason
+   for the toolbox; nothing else about the container matters.
+3. **The channel grid is a separate COM component that the installer fails to
+   register.** Symptom is a dialog saying *"attempted an unsupported operation"* and a
+   blank white grid area, with the app otherwise responsive and idle.
+
+#### Why problem 3 is worth reading before debugging anything similar
+
+The visible error names nothing. The chain is:
+
+```
+"attempted an unsupported operation"          <- MFC reporting a COM failure
+err:ole:com_get_class_object class {de52502e-f837-492b-ae14-a182531afaf4} not registered
+  -> binary GUID search finds it in FPSPRU80.ocx   (FarPoint Spread 8 — the grid)
+  -> regsvr32 FPSPRU80.ocx fails SILENTLY
+  -> with output shown: "Library MFC42u.DLL not found"
+  -> the grid is 2010-era and needs MFC 4.2 (VC++ 6), NOT the MFC 10 that
+     RadioEngine_V5.exe itself uses. Hence winetricks mfc42 as well as vcrun2010.
+```
+
+Note the GUID is stored little-endian in the PE, so `grep` for the printed form finds
+nothing — search for `uuid.UUID(...).bytes_le`.
+
+> [!IMPORTANT]
+> This lives in the **`wine41` toolbox container**, not in the image. It survives
+> reboots, but a fresh install has none of it, and `toolbox rm wine41` destroys it.
+> The image deliberately does not carry a second Wine version; if that becomes
+> unacceptable, the alternative is a Windows VM, not pinning Wine in the recipe.
+
+**Still untested: talking to a radio.** Installing and running is not programming a
+radio. The cable is mapped to COM1 by its by-id path, and §6.5's DTR/RTS warning
+applies to the cloning cable as much as to the FT-710 — treat first contact carefully.
 
 ### 6.9 Pat / Winlink — VARA, ARDOP, and the shared rigctld
 
@@ -839,6 +840,12 @@ picking the project up on the shack machine.
   CT29F on `ftdi_sio`, two FT232Rs, both CP2105 interfaces on `cp210x`, a CH340
   on `ch341-uart`. No udev rules needed.
 - Groups fixed (§6.1 — and read that warning, it is not the obvious command).
+- **RT Systems programmers work** (§6.8c) — DR-CS25 installs, launches and draws its
+  channel grid. Needed Wine 10.15 in a toolbox (Wine 11.0 corrupts its own heap
+  during the install), plus `mfc42` and a manual `regsvr32` of the FarPoint grid
+  control the installer fails to register. Programming an actual radio is still
+  untested.
+- VARA HF v4.9.0 runs under Wine and is registered (§6.9); Pat drives it.
 - Displays done and verified on the hardware (§6.3): HDMI-A-1 (1920x1080) primary
   at the origin, DP-3 (1600x900) to its left at `x=-1600`. Note that the config
   niri actually reads here is the stowed dotfiles copy, not the image's
@@ -885,35 +892,16 @@ picking the project up on the shack machine.
 
 ### Genuinely open
 
-1. **Do the RT Systems programmers actually work under Wine?** Still untested,
-   but no longer for want of software — `DRCS25_Setup.exe` and `KGUV96_Setup.exe`
-   are downloaded to `~/Downloads`. They are native Win32/MFC (`RadioEngine_V5.exe`
-   + per-radio DLL, linked against `mfc100u`), a far better Wine prospect than
-   .NET, and the cable side is already proven.
-   **Progress on 2026-08-26, and where it stopped.** With §6.8's policy module in
-   place the installer runs: it draws its MFC GUI, takes a language, a serial, an
-   email and an install path, and writes the registration to
-   `Software\RT Systems V5\Alinco\DR-CS25 Programmer` in the prefix. So the Wine
-   GUI layer is not the problem — that much is now evidence, not hope.
-   It then aborts at the file-copy stage with `err:seh:call_seh_handlers invalid
-   frame`, and installs nothing. Adding `mfc100u`/`msvcr100` via
-   `winetricks -q vcrun2010` did not change the outcome (it changed the crash from
-   heap corruption to the SEH abort, which is progress but not a fix).
-   **Closest yet, and the remaining step is manual.** In `wineprefixes/rtnew` —
-   win64, **winxp mode**, `vcrun2010` — the installer starts and waits for input
-   rather than crashing or exiting silently. It has no silent-install flag, and its
-   GUI cannot be driven programmatically (`wtype` does not reach XWayland clients),
-   so somebody has to click the wizard:
-   `WINEPREFIX=~/.local/share/wineprefixes/rtnew wine ~/Downloads/DRCS25_Setup.exe`
-   Everything already ruled out is in §6.8c — read it before trying anything.
-   The original question, DTR/RTS control-line handling on a cloning cable, has
-   still never been reached. If the wizard fails too, the answer is a Windows VM.
-2. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
+1. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
    N1MM is needed, use a Windows VM — install `org.gnome.Boxes` then, it is
    deliberately not baked. `not1mm` is the Linux alternative: `pipx install not1mm`.
-3. **niri window rules are unverified.** Run `kb3lyb-check-window-rules` with the
-   ham apps open. The `wine` and `sdrtrunk` patterns are the doubtful ones (§6.4).
-4. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
+2. **niri window rules are only partly verified.** The `wine` pattern WAS wrong and
+   is fixed — it matched `^(?i)wine$` on the belief that niri matches the second
+   WM_CLASS field, but niri reports the instance name, so a Wine window's app-id is
+   the executable (`drcs25_setup.exe`, `vara.exe`). It now matches `.exe`, with VARA
+   excepted so it tiles. `sdrtrunk` and the WSJT-X/fldigi/CHIRP patterns are still
+   unchecked — run `kb3lyb-check-window-rules` with those apps open (§6.4).
+3. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
    `$HOME` install, deliberately not baked.
 
 ### Working on this repo from the shack machine
