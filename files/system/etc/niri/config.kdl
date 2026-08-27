@@ -207,8 +207,11 @@ window-rule {
 // properly resizable layout and tiles fine; floating it just made it behave
 // unlike every other window. The apps left here genuinely need floating — the
 // rule is about toolkits that break when tiled, not about being ham software.
+// chirp REMOVED 2026-08-27, same as qlog and qsstv: it is an ordinary resizable
+// window that tiles fine. What is left here are the ones that genuinely want to be
+// left alone at their own size.
 window-rule {
-    match app-id=r#"^(?i)(chirp|klog|tqsl|gpredict|xastir)$"#
+    match app-id=r#"^(?i)(klog|tqsl|gpredict|xastir)$"#
     open-floating true
 }
 

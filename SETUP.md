@@ -854,6 +854,57 @@ first and last are set, to the standard SSTV calling frequencies:
 on HF, FM on 6 m and 2 m. If entries are ever added by hand, keep the lists the same
 length — they are positional.
 
+Both lists must be **fully populated and equal length**. Leaving `modeList` and
+`passBandList` as `@Invalid()` while setting the other two makes QSSTV silently
+discard the whole lot on exit — the format is `SSTV` and `Normal` respectively.
+
+**QLog's cluster settings are NOT in QLog.conf.** They live in the `log_param` table
+of `~/.local/share/hamradio/QLog/qlog.db`:
+
+```bash
+sqlite3 qlog.db "select name,value from log_param where name like 'dxc/%';"
+```
+
+Writing them into `~/.config/hamradio/QLog.conf` looks plausible — the binary
+contains `dxc/*` key names and QSettings will happily store them — but nothing reads
+them there. QSettings also preserves unknown keys, so a wrong guess persists across
+restarts and looks like it worked.
+
+### 6.12 Dark mode: the portal reads dconf, and `gsettings set` may write nothing
+
+Electron apps (Slack, VS Code, Discord) and Qt6 read the **XDG portal**, not GSettings
+directly. Check what they are actually being told:
+
+```bash
+gdbus call --session --dest org.freedesktop.portal.Desktop \
+  --object-path /org/freedesktop/portal/desktop \
+  --method org.freedesktop.portal.Settings.Read \
+  org.freedesktop.appearance color-scheme      # 0=light/none, 1=dark, 2=light
+```
+
+On 2026-08-27 that returned **0** while `gsettings get org.gnome.desktop.interface
+color-scheme` returned `prefer-dark`, so Slack started in light mode. The two disagree
+because they read different layers:
+
+- `gsettings set` was a **silent no-op** — it wrote nothing to dconf, and
+  `dconf read /org/gnome/desktop/interface/color-scheme` came back **empty**.
+- The portal reads dconf. Empty means "no preference", i.e. light.
+
+The fix is to force an explicit dconf entry:
+
+```bash
+dconf write /org/gnome/desktop/interface/color-scheme "'prefer-dark'"
+```
+
+After which the portal reports `1`. **No portal configuration change was needed** —
+routing Settings to the gtk backend was tried and made no difference, because the
+backend was reading the right place and finding nothing there.
+
+Note GTK apps looked dark throughout, because `GTK_THEME=Adwaita:dark` is set in the
+niri `environment` block — an env var, a completely separate mechanism. That is why
+`tqsl` and `gpredict` were fine while Slack was not, and why "some apps are dark" is
+not evidence the system setting is correct.
+
 ---
 
 ## 7. Backup checklist — BEFORE wiping
