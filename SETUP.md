@@ -473,6 +473,24 @@ the Nextcloud **desktop sync client** — the two are mutually exclusive by
 hostname guard, because a sync client pointed at `~/Nextcloud` would try to pull
 the whole ~88 GB tree onto a 238 GB disk. Do not remove that guard.
 
+> [!WARNING]
+> **The hostname guard alone is NOT enough, and the client proved it.** After the
+> guard was in place the client still kept appearing on the shack PC. The guard was
+> working and was not the problem: the flatpak exports a **D-Bus activation
+> service** (`com.nextcloudgmbh.Nextcloud.service`) to the host bus, so anything
+> requesting that bus name starts the client — no autostart entry, no niri
+> involvement, and nothing a spawn guard can intercept. It also writes its own
+> `~/.var/app/.../config/autostart/Nextcloud.desktop` inside the sandbox.
+>
+> So on this machine the flatpak is **uninstalled outright** (2026-08-27), which
+> removes the D-Bus service with it. Nextcloud here is the rclone mount and only the
+> rclone mount. The guard stays for the laptop's sake. If the client is ever
+> reinstalled here, expect it to start itself again regardless of the guard:
+>
+> ```bash
+> ls /var/lib/flatpak/exports/share/dbus-1/services/ | grep -i nextcloud
+> ```
+
 **GVFS** — `davs://` in Thunar, no config needed. WebDAV is built into the base
 `gvfs` (`gvfsd-dav`), so this works out of the box.
 
