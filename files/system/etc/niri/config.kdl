@@ -143,11 +143,19 @@ spawn-at-startup "blueman-applet"
 // The weak-signal digital cluster. Sized rather than merely floated: WSJT-X in
 // particular is unusable below roughly this height because the waterfall and the
 // decode list share the vertical space.
+// WSJT-X tiles, full width, with the waterfall stacked on top at ~20% height.
+// Both windows share the app-id "wsjtx", so they are told apart by TITLE — the
+// waterfall is "WSJT-X - Wide Graph". These rules set the sizes; scripts/wsjtx-layout
+// (Mod+W) does the stacking, because niri has no rule for "open into the existing
+// column" — that needs consume-or-expel, which is an action.
 window-rule {
     match app-id=r#"^(?i)wsjt-?x$"#
-    open-floating true
-    default-column-width { fixed 1100; }
-    default-window-height { fixed 900; }
+    open-floating false
+    default-column-width { proportion 1.0; }
+}
+window-rule {
+    match app-id=r#"^(?i)wsjt-?x$"# title=r#"Wide Graph"#
+    default-window-height { proportion 0.2; }
 }
 
 window-rule {
@@ -159,11 +167,10 @@ window-rule {
 
 // The fldigi suite. FLTK under Xwayland; flrig is a small always-visible control
 // panel and gets no fixed size, since its natural one is already right.
+// fldigi tiles too (2026-08-27) — it is a normal resizable window.
 window-rule {
     match app-id=r#"^(?i)fldigi$"#
-    open-floating true
-    default-column-width { fixed 1200; }
-    default-window-height { fixed 800; }
+    open-floating false
 }
 
 window-rule {

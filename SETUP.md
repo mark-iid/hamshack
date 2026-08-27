@@ -870,6 +870,38 @@ contains `dxc/*` key names and QSettings will happily store them — but nothing
 them there. QSettings also preserves unknown keys, so a wrong guess persists across
 restarts and looks like it worked.
 
+### 6.11b WSJT-X window layout
+
+`Mod+W` runs `scripts/wsjtx-layout`, which stacks WSJT-X's two windows in one
+full-width column — waterfall on top at ~20%, main window below:
+
+```
++----------------------------------+
+|  WSJT-X - Wide Graph        ~20% |
++----------------------------------+
+|  WSJT-X main                ~80% |
++----------------------------------+
+```
+
+Three things this needs that are not obvious:
+
+1. **Both windows share the app-id `wsjtx`**, so they are told apart by TITLE — the
+   waterfall contains "Wide Graph". The window rules in `config.kdl` set tiling and
+   sizes; the script does the stacking.
+2. **niri has no window-rule for "open into the existing column."** New windows always
+   get their own column, so merging needs `consume-or-expel-window-left`, an action.
+   Hence a script, same as `scripts/comms`.
+3. **The script gathers onto an empty workspace first.** Without that,
+   `move-column-to-first/last` reorder relative to every other window on the
+   workspace and the consume merges the wrong pair.
+
+Two traps found while building it: a consumed window lands at the **bottom** of the
+target column, so the WATERFALL's column must be the survivor and the main window is
+consumed into it — doing it the other way silently inverts the layout. And WSJT-X maps
+a short-lived **splash** also titled "WSJT-X" (the real one carries a version, e.g.
+"WSJT-X   v3.0.1"), so the script picks the tallest non-waterfall window rather than
+the lowest id, and re-reads the ids after a settle.
+
 ### 6.12 Dark mode: the portal reads dconf, and `gsettings set` may write nothing
 
 Electron apps (Slack, VS Code, Discord) and Qt6 read the **XDG portal**, not GSettings
