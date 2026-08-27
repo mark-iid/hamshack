@@ -174,8 +174,11 @@ window-rule {
 // SDR receivers. These want to be wide — the whole point is a spectrum display —
 // so they are floated but left at whatever size they ask for, which for gqrx and
 // SDR++ is a remembered geometry that is usually already what you want.
+// qsstv REMOVED from this list 2026-08-27, same reasoning as qlog: it is a normal
+// resizable Qt app that tiles fine. The apps left here are floated because they want
+// to be wide for a spectrum display, not because they break when tiled.
 window-rule {
-    match app-id=r#"^(?i)(gqrx|sdrpp|sdrangel|qsstv)$"#
+    match app-id=r#"^(?i)(gqrx|sdrpp|sdrangel)$"#
     open-floating true
 }
 

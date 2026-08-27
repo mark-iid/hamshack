@@ -788,6 +788,32 @@ ardopcf 8515 <capture-device> <playback-device>
 PTT stays with rigctld — do not also give ardopcf its own serial PTT, or two
 processes own the CAT port.
 
+### 6.10 QSSTV and WSJT-X — both on the shared rigctld
+
+Same rule as everything else: **Hamlib NET rigctl at `127.0.0.1:4532`**, never a raw
+device, never `localhost`.
+
+| app | config | set |
+|---|---|---|
+| QSSTV | `~/.config/ON4QZ/qsstv_9.0.conf` | callsign, locator EN90xm, QTH; `radioModel` NET rigctl; `serialPort=127.0.0.1:4532` |
+| WSJT-X | `~/.local/share/WSJT-X/WSJT-X.ini` | `Rig=Hamlib NET rigctl` (came from Windows), `CATNetworkPort=127.0.0.1:4532` |
+
+Two traps in these files specifically:
+
+- **QSSTV puts the NET rigctl address in `serialPort`**, not in a host/port field. It
+  shipped as `/dev/ttyS0`, which looks plausible and is wrong for model 2.
+- **QSSTV defaults to `activeRTS=true`.** RTS is PTT on this rig (§6.5). rigctld owns
+  the port and does PTT over CAT, so QSSTV must not assert the lines itself —
+  `activeRTS` and `activeDTR` are both forced false, and `enableSerialPTT` stays off.
+
+WSJT-X's `.ini` came across from the Windows install, so it already had the right rig
+model and `MyCall`/`MyGrid`, but `CATNetworkPort` was **empty** — the right model
+pointing at nothing. Its `SoundInName`/`SoundOutName` are still Windows strings and
+are set in the GUI.
+
+Its log is the digital-only file from §6.7: 7,263 records, zero SSB/CW. Do not
+replace it with the 8,584-record original.
+
 ---
 
 ## 7. Backup checklist — BEFORE wiping
