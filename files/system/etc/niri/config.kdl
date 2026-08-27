@@ -227,6 +227,17 @@ window-rule {
     open-floating true
 }
 
+// VARA is the exception to the Wine float rule above. It matches `.exe` and so was
+// being floated, which in niri also means it sits above the tiled layer and is not
+// part of the layout — reported as "not tiled, not movable, always on top", which is
+// three descriptions of one thing. VARA is a modem UI with a normal resizable
+// window, not a Win32 dialog that positions children relative to itself, so it
+// tiles perfectly well. A later rule wins for the same property.
+window-rule {
+    match app-id=r#"^(?i)vara\.exe$"#
+    open-floating false
+}
+
 // Transient dialogs from anything above — rig config, band settings, file
 // pickers. Matched on title because the app-id is the parent app's.
 window-rule {
