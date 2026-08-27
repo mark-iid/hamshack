@@ -633,8 +633,14 @@ removed again — see the comment in `recipes/common/hamradio.yml`.
 
 ### 6.8c RT Systems programmers — WORKING, via an older Wine in a toolbox
 
-Solved 2026-08-27 after a long detour. The DR-CS25 programmer installs, launches and
-draws its channel grid. Three separate things were wrong; each masked the next.
+Solved 2026-08-27 after a long detour. **Both** programmers install, launch and draw
+their channel grid — Alinco DR-CS25 and Wouxun KG-UV96. Three separate things were
+wrong; each masked the next.
+
+The second programmer needed no extra work: same prefix, same recipe, installer
+exited cleanly with no COM errors, because `mfc42` and the registered FarPoint grid
+are shared across RT Systems V5 apps. Expect any further RT Systems title to be the
+same — install it into this prefix and it should simply work.
 
 #### The recipe
 
@@ -702,9 +708,21 @@ Station is KB3LYB / EN90xm, taken from the log rather than typed from memory.
 
 | transport | addr | native? | state |
 |---|---|---|---|
-| ARDOP | `localhost:8515` | **yes** — `ardopcf`, in the image | modem installed; not yet run |
-| VARA HF | `localhost:8300` | no — Windows, needs Wine | **not installed**, licence pending |
-| VARA FM | `localhost:8300` | no — Windows, needs Wine | **not installed** |
+| VARA HF | `127.0.0.1:8300` | no — Windows, under Wine | **working, registered, PROVEN ON AIR** 2026-08-27 |
+| VARA FM | `127.0.0.1:8300` | no — Windows, under Wine | installed, untested |
+| ARDOP | `127.0.0.1:8515` | **yes** — `ardopcf` | **untested — the binary is not on the machine yet** |
+
+> [!NOTE]
+> **ARDOP has not failed; it has never run.** `install-ardopcf.sh` went into the
+> recipe on 2026-08-26, *after* the image this machine booted. Pat is configured
+> correctly and nothing answers on 8515 because the modem is not installed. Get it
+> with `sudo rpm-ostree upgrade` + reboot, then start it per session:
+> `ardopcf 8515 <capture-device> <playback-device>`.
+
+**Addresses are `127.0.0.1`, never `localhost`** — deliberately. `localhost` resolves
+to `::1` first on this machine, and an IPv4-only listener is then simply refused.
+That cost an hour on QLog↔rigctld (§6.5) and would have been the first thing to
+suspect with ARDOP.
 
 All three point at the rig named `ft710`, which is the **shared rigctld** from §6.5,
 addressed as `127.0.0.1:4532`. Not `localhost` — see the IPv6 trap in that section.
@@ -752,10 +770,10 @@ rigctld when it connects. That is correct and necessary for Winlink, but it mean
 Pat is a third CAT consumer alongside QLog and CATTouch — see the contention note in
 §6.5 if protocol errors appear once Pat is actually operating.
 
-Still needed before Pat can be used:
+Still needed:
 
 1. `secure_login_password` is empty. Set it with `pat configure`.
-2. VARA, once licensed, into its own Wine prefix.
+2. `ardopcf` — needs the image upgrade above.
 3. Audio routing — VARA and ardopcf each need the FT-710's USB codec selected as
    their soundcard. That is configured in VARA's own UI and in ardopcf's device
    arguments, NOT in Pat, and it is the step most likely to be mistaken for a Pat
@@ -840,12 +858,14 @@ picking the project up on the shack machine.
   CT29F on `ftdi_sio`, two FT232Rs, both CP2105 interfaces on `cp210x`, a CH340
   on `ch341-uart`. No udev rules needed.
 - Groups fixed (§6.1 — and read that warning, it is not the obvious command).
-- **RT Systems programmers work** (§6.8c) — DR-CS25 installs, launches and draws its
-  channel grid. Needed Wine 10.15 in a toolbox (Wine 11.0 corrupts its own heap
-  during the install), plus `mfc42` and a manual `regsvr32` of the FarPoint grid
-  control the installer fails to register. Programming an actual radio is still
-  untested.
-- VARA HF v4.9.0 runs under Wine and is registered (§6.9); Pat drives it.
+- **RT Systems programmers work** (§6.8c) — BOTH of them: Alinco DR-CS25 and Wouxun
+  KG-UV96 install, launch and draw their channel grid. Needed Wine 10.15 in a toolbox
+  (Wine 11.0 corrupts its own heap during the install), plus `mfc42` and a manual
+  `regsvr32` of the FarPoint grid control the installer fails to register.
+  Programming an actual radio is still untested.
+- **Winlink works and is PROVEN ON AIR** (§6.9) — VARA HF v4.9.0 under Wine,
+  registered, driven by Pat over the shared rigctld. ARDOP is configured but its
+  modem is not installed yet; it has never run, which is not the same as failing.
 - Displays done and verified on the hardware (§6.3): HDMI-A-1 (1920x1080) primary
   at the origin, DP-3 (1600x900) to its left at `x=-1600`. Note that the config
   niri actually reads here is the stowed dotfiles copy, not the image's
