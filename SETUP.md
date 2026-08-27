@@ -902,6 +902,118 @@ a short-lived **splash** also titled "WSJT-X" (the real one carries a version, e
 "WSJT-X   v3.0.1"), so the script picks the tallest non-waterfall window rather than
 the lowest id, and re-reads the ids after a settle.
 
+### 6.11c WSJT-X to QLog: UDP on loopback
+
+WSJT-X broadcasts QSOs over UDP; QLog listens. QLog is already listening on **2237**
+(and 9876 for fldigi) — those live in the `log_param` table, not QSettings.
+
+The Windows-inherited `WSJT-X.ini` had:
+
+```ini
+UDPServer=192.168.48.255                  ; LAN BROADCAST — sprayed QSO data
+UDPInterface=ethernet_32769, loopback_0   ; Windows interface names, meaningless here
+```
+
+Corrected to `UDPServer=127.0.0.1`, `UDPServerPort=2237`, `UDPInterface=` empty,
+`AcceptUDPRequests=true`.
+
+> [!IMPORTANT]
+> Unicast to loopback means **exactly one consumer**. GridTracker2 or JTAlert would
+> conflict. For more than one listener, switch both sides to multicast — QLog has
+> `network/listener/wsjtx/multicast/{join,addr,ttl}` in `log_param`, currently off.
+> Since §9 lists GridTracker2 as daily-use software, expect to need this.
+
+### 6.11d Audio routing and levels
+
+**Two separate devices, deliberately:**
+
+| | device | why |
+|---|---|---|
+| System alerts | `Built-in Audio Analog Stereo`, port `analog-output-speaker` | analog cable from the PC's rear line-out into the **ViewSonic**, which has the speakers |
+| Radio | `USB Audio Device` (C-Media) | WSJT-X / QSSTV / fldigi point here explicitly |
+
+The default sink is the built-in analog one, so notifications never go out over the
+air. Not display audio: only the **Lenovo** advertises HDMI audio (`eld#2.0`,
+`monitor_name T2224pD`) and it has no speakers — the ViewSonic is fed by a cable
+nothing in software can see. Do not "fix" this by switching to HDMI.
+
+> [!WARNING]
+> **Use `wpctl`, not `amixer`.** PipeWire owns these ALSA controls and will overwrite
+> `amixer` changes. This was learned the hard way: capture gain was set with `amixer`,
+> then a later `wpctl set-volume … 1.0` silently put it back to +23 dB. Verified
+> relationship — `wpctl set-volume <id> 0.40` → ALSA `Playback 14 [-23.00dB]`.
+> `amixer` is only correct for controls PipeWire does not manage, such as AGC.
+
+**Receive gain.** The codec defaulted to `Capture 35 [+23.00dB]` with **Auto Gain
+Control ON** — WSJT-X's meter pinned in the red. AGC is actively harmful for digital
+modes: it rides the level on every strong signal. Now `0.45` → `Capture 14
+[+2.00dB]`, AGC off. Aim for ~30 dB on WSJT-X's meter with no signals.
+
+**Transmit level — three controls, in this order:**
+
+1. **WSJT-X `Pwr` slider** (`OutAttenuation` in the ini, tenths of a dB) — the
+   per-session control.
+2. **`wpctl set-volume <usb-sink-id> 0.50`** — set once and leave.
+3. **The FT-710's own USB input gain** — coarse, in the radio's menu.
+
+Target **zero ALC deflection**, not "a little". ALC on a constant-envelope digital
+signal distorts it and splatters; a clean 25 W beats a clipped 50 W. Set output power
+with the radio's power control, never by driving the audio harder. Note `TxPower=50`
+in `WSJT-X.ini` is the figure written to the LOG, not a drive control.
+
+**Persistence.** Volumes and the default sink live in
+`~/.local/state/wireplumber/{default-nodes,default-routes}`, keyed by the card's
+stable USB id — they survive reboots and replugging. AGC is not a volume, so it is
+stored by `alsactl store` in `/var/lib/alsa/asound.state` and restored via
+`sound.target`.
+
+### 6.11e Time sync — already correct, do not change it
+
+FT8 needs sub-second accuracy. `chronyd` is active and enabled, stratum 2, running
+**0.9 ms** off with a 0.7 ms RMS offset — about a thousand times the margin needed.
+
+`/etc/chrony.conf` already has the setting that matters for a machine woken for an
+operating session and left off otherwise:
+
+```
+makestep 1.0 3      # step, don't slew, if more than 1s out on the first 3 updates
+rtcsync             # keep the hardware clock disciplined too
+```
+
+Check before a session with `chronyc tracking`. If WSJT-X shows a consistent DT
+offset while chrony reports sub-millisecond, that is a **soundcard sample-rate**
+problem, not clock sync — a different diagnosis.
+
+### 6.11f fldigi crashes on Fedora 44 — use the toolbox build
+
+`fldigi-4.2.13-1.fc44` **aborts on startup**, before drawing anything:
+
+```
+basic_string::operator[]: Assertion '__pos <= size()' failed
+  Fl_ComboBox::add(char const*)
+  ConfigureDialog()
+```
+
+Tracing the strings passed to `Fl_ComboBox::add` shows the last one is **empty** —
+`ADD: []` — immediately after the hardcoded US states list. The parser indexes past
+the end of it. Fedora builds with `_GLIBCXX_ASSERTIONS`, which turns that latent
+out-of-bounds read into a hard abort; elsewhere it is silent UB nobody notices.
+
+**It is not your config**: a fresh `--config-dir` and `LC_ALL=C` both crash
+identically. Nothing in fldigi's settings can avoid it.
+
+Workaround — the Fedora 41 toolbox already present for RT Systems (§6.8c):
+
+```bash
+toolbox run -c wine41 sudo dnf install -y fldigi   # 4.2.06
+toolbox run -c wine41 env DISPLAY=:0 fldigi
+```
+
+That build starts normally. Caveats: it is seven point releases behind, and fldigi in
+a container has to reach **audio** as well as the serial port — harder than RT
+Systems, which only needed a tty. Audio was not verified. This is worth reporting
+upstream; the backtrace and the `ADD: []` are all a maintainer needs.
+
 ### 6.12 Dark mode: the portal reads dconf, and `gsettings set` may write nothing
 
 Electron apps (Slack, VS Code, Discord) and Qt6 read the **XDG portal**, not GSettings
@@ -1012,6 +1124,10 @@ picking the project up on the shack machine.
   (Wine 11.0 corrupts its own heap during the install), plus `mfc42` and a manual
   `regsvr32` of the FarPoint grid control the installer fails to register.
   Programming an actual radio is still untested.
+- Audio split so alerts never go over the air (§6.11d): system default is the analog
+  jack feeding the ViewSonic; the radio's USB codec is used only by the ham apps.
+  RX gain fixed (+23 dB and AGC on -> +2 dB, AGC off).
+- WSJT-X logs to QLog over UDP on loopback (§6.11c), no longer LAN-broadcasting QSOs.
 - **Winlink works and is PROVEN ON AIR** (§6.9) — VARA HF v4.9.0 under Wine,
   registered, driven by Pat over the shared rigctld. ARDOP is configured but its
   modem is not installed yet; it has never run, which is not the same as failing.
@@ -1071,7 +1187,12 @@ picking the project up on the shack machine.
    excepted so it tiles. `sdrtrunk` and the WSJT-X/fldigi/CHIRP patterns are still
    unchecked — run `kb3lyb-check-window-rules` with those apps open (§6.4).
 3. **GridTracker2** is used daily on Windows and is packaged nowhere. It is a
-   `$HOME` install, deliberately not baked.
+   `$HOME` install, deliberately not baked. Note it will need the WSJT-X UDP stream,
+   which is currently unicast to one consumer — see the multicast note in §6.11c.
+4. **fldigi is broken in the image** (§6.11f) — `4.2.13-1.fc44` aborts on startup on
+   an out-of-bounds string read that Fedora's `_GLIBCXX_ASSERTIONS` turns fatal. The
+   Fedora 41 toolbox build runs; audio-through-container is unverified. Not reported
+   upstream yet.
 
 ### Working on this repo from the shack machine
 
