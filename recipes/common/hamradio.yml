@@ -156,30 +156,35 @@ modules:
   #
   # It was carried briefly as insurance and measured: 186 i686 packages, 1.23 GB.
   #
-  # THAT CONDITION HAS NOW BEEN MET, so wine-core.i686 is back below. What happened
-  # on 2026-08-26, in order, because the order is the useful part:
+  # IT WAS ADDED BACK ON 2026-08-26 AND REMOVED AGAIN ON 2026-08-27, having been
+  # measured rather than argued about. The sequence, because the order is the whole
+  # lesson:
   #
   #   1. Every 32-bit PE failed outright — SELinux `execmod` denied on lib_t. That
-  #      is a composefs property, not a Wine one, and i686 does NOT fix it. See
-  #      SETUP §6.8; the fix is the policy module in selinux/kb3lyb-wine32.te.
-  #   2. With that in place the DRCS25 installer ran, drew its MFC GUI, took a
-  #      serial and an install path — then died in
-  #      `err:seh:call_seh_handlers invalid frame`, with addresses above 4 GB in a
-  #      32-bit process. That is a new-WoW64 exception-handling gap, exactly the
-  #      case the note above says the classic loader is insurance against.
-  #   3. `WINEARCH=win32` is refused outright without it: "not supported in wow64
-  #      mode". So a pure 32-bit prefix — the way round the WoW64 SEH path — cannot
-  #      even be created unless this package is present.
+  #      is a composefs property, not a Wine one, and i686 does NOT fix it. The fix
+  #      is the policy module in selinux/kb3lyb-wine32.te (SETUP §6.8). This was the
+  #      only real problem, and it was never about packaging.
+  #   2. With that fixed, the DRCS25 installer still died in
+  #      `err:seh:call_seh_handlers invalid frame`. i686 was added to enable a
+  #      WINEARCH=win32 prefix as a way around the WoW64 exception path.
+  #   3. That did not work either — in a win32 prefix the installer exits earlier
+  #      and more silently than before. The win32 route made things WORSE.
+  #   4. VARA HF then installed and ran perfectly in an ORDINARY win64 prefix with
+  #      plain `wine` (SETUP §6.9). Fedora's Wine is new-WoW64: it runs 32-bit
+  #      Windows apps in a 64-bit prefix, and `WINEARCH=win32` is neither needed nor
+  #      supported. The advice that sent us down that path was a Pat wiki page
+  #      predating new-WoW64.
+  #   5. RT Systems' remaining progress came from winxp compatibility mode, not from
+  #      architecture.
   #
-  # Local `rpm-ostree install wine-core.i686` does NOT work as a shortcut: it pulls
-  # 32-bit libva -> 32-bit mesa-libGL, which collides with the base image's pinned
-  # mesa-libGL. Layering resolves against the repos while the base is fixed, so the
-  # two cannot agree. In an image BUILD the whole transaction resolves together,
-  # which is why this belongs here and not on the machine.
+  # So nothing on this machine needs the classic 32-bit loader. Both live prefixes
+  # (VARA, and the RT Systems one) are win64 driven by plain `wine`. Removing it
+  # returns ~186 packages / ~1.23 GB — real money on a 256 GB disk holding two
+  # deployments.
   #
-  # Cost is real: expect ~186 extra packages / ~1.23 GB on a 256 GB disk holding two
-  # deployments. If the programmers ultimately prove unworkable and the answer turns
-  # out to be a Windows VM, delete this line again — do not leave it out of inertia.
+  # DO NOT add it back to fix "32-bit does not work". That symptom is §6.8's SELinux
+  # module, every time. Add it back only if something genuinely requires a
+  # WINEARCH=win32 prefix, and say in the commit what that thing is.
   - type: dnf
     install:
       exclude:
@@ -188,7 +193,6 @@ modules:
       packages:
         - wine
         - winetricks
-        - wine-core.i686
 
   # ------------------------------------------- out-of-repo: sdrtrunk and Pat
   # Two things this stack needs that are packaged nowhere. Both are installed by

@@ -576,60 +576,69 @@ sudo semodule -i /tmp/kb3lyb-wine32.pp
 sudo semodule -l | grep kb3lyb        # verify
 ```
 
-### 6.8b `wine` is NOT the 32-bit entry point — `wine32` is
+### 6.8b Do NOT reach for `WINEARCH=win32` — a normal prefix runs 32-bit apps
 
-With `wine-core.i686` in the image (recipe change 2026-08-26), a genuine 32-bit
-prefix is possible — but **only via `/usr/bin/wine32`**:
-
-```bash
-export WINEARCH=win32 WINEPREFIX=~/.local/share/wineprefixes/rt32
-/usr/bin/wine32 wineboot -u        # works -> #arch=win32
-wine wineboot -u                   # FAILS: "not supported in wow64 mode"
-```
-
-`/usr/bin/wine` is a symlink to `/etc/alternatives/wine`, which resolves to
-**`wine64`** — and `alternatives --display wine` prints nothing, i.e. the i686
-package's alternative was never configured. The build log says so out loud
-(`/usr/bin/wine32 has not been configured as an alternative for wine`) and it is
-easy to read past. So plain `wine` refuses win32 prefixes no matter what is
-installed, and the failure message blames wow64 mode rather than the symlink.
-
-Use `wine32` for everything touching a win32 prefix, including winetricks:
+Fedora's Wine is **new-WoW64**: it runs 32-bit Windows applications inside an
+ordinary **64-bit** prefix. There is nothing to configure. Just:
 
 ```bash
-WINE=/usr/bin/wine32 WINESERVER=/usr/bin/wineserver32 \
-  WINEARCH=win32 WINEPREFIX=~/.local/share/wineprefixes/rt32 \
-  winetricks -q vcrun2010
+export WINEPREFIX=~/.local/share/wineprefixes/<name>   # NO WINEARCH
+wine wineboot -u
 ```
 
-Verified after the reboot onto the new image: `#arch=win32` prefix created, and
-32-bit `cmd.exe` runs under SELinux **Enforcing**. The `kb3lyb-wine32` policy
-module survives a reboot (it lives in `/etc/selinux`, not in the image).
+Asking for a 32-bit prefix fails with a message that sounds like a missing package
+but is not:
+
+```
+wine: WINEARCH is set to 'win32' but this is not supported in wow64 mode.
+```
+
+**That message is not an instruction to install anything.** It means you asked for
+something this Wine does not do and does not need to do. Verified 2026-08-26/27:
+32-bit `cmd.exe` runs in a normal win64 prefix under SELinux Enforcing, and VARA HF
+— a 32-bit application — installs and runs there (§6.9).
+
+This cost a whole rebuild-and-reboot cycle, so it is worth stating what went wrong.
+Pat's wiki says to use `WINEARCH=win32` for VARA. That advice predates new-WoW64.
+Following it led to adding `wine-core.i686` (186 packages, 1.23 GB) to get the
+classic `i386-unix` loader and a `/usr/bin/wine32` binary, because `/usr/bin/wine`
+is an alternatives symlink resolving to `wine64` and refuses win32 prefixes. All of
+that worked, and all of it was unnecessary: the win32 prefix made the RT Systems
+installer behave *worse*, and VARA never needed it. The package has since been
+removed again — see the comment in `recipes/common/hamradio.yml`.
+
+> [!IMPORTANT]
+> If 32-bit Windows binaries fail on this machine, the cause is **§6.8's SELinux
+> `execmod` denial**, essentially every time. It is not a missing multilib package,
+> and adding `wine-core.i686` will not fix it — that was tried and measured. Check
+> `sudo semodule -l | grep kb3lyb` first.
 
 ### 6.8c RT Systems programmers: where this actually got to
 
-**Not working. Two prefixes, two different failures, neither installs.**
+**Not finished. One step remains, and it needs a human at the keyboard.**
 
-| prefix | result |
+Three prefixes were tried on 2026-08-26/27. The first two were deleted once they had
+taught what they were going to; only `rtnew` still exists.
+
+| prefix (all had `vcrun2010`) | result |
 |---|---|
-| `~/.local/share/wineprefixes/rtsystems` (win64/WoW64) | reaches language -> serial -> email -> install path, then dies in `err:seh:call_seh_handlers invalid frame` |
-| `~/.local/share/wineprefixes/rt32` (win32) | language dialog -> OK -> spawns four processes -> all exit cleanly, rc=0, **zero errors**, nothing installed |
+| win64, Windows 10 mode *(deleted)* | reaches language → serial → email → install path, then dies in `err:seh:call_seh_handlers invalid frame` |
+| win32 *(deleted)* | language dialog → OK → four processes spawn and all exit cleanly, rc=0, **zero errors**, nothing installed — it went BACKWARDS |
+| **`rtnew`: win64, winxp mode** | installer starts and **waits for input**. No crash, no silent exit. |
 
-Both prefixes have `vcrun2010` (the programmers link against `mfc100u`/`msvcr100`).
-
-The win32 result is the informative one: no crash, no exception, no missing DLL —
-just routine `fixme` lines and a clean exit. That is an installer *choosing* to
-stop on some prerequisite check, not Wine failing. Candidates are a cable-presence
-check, an elevation check, or an OS-version check, and there is no error to
-distinguish them. Note it went **backwards**: the win32 prefix, which was supposed
-to be the fix, does not even reach the serial prompt.
+The lesson across those three is that **winxp compatibility mode is what helped**,
+not architecture. The win32 prefix — built specifically to fix this — made it worse,
+which is the evidence that ended the `wine-core.i686` experiment (§6.8b).
 
 Things already ruled out, so nobody repeats them:
 
 - Not the SELinux denial (§6.8) — fixed, and 32-bit runs fine now.
 - Not a missing MFC runtime — `winetricks -q vcrun2010` installed it in both.
-- Not the registration key: porting the `Software\RT Systems V5\...` key from the
-  win64 prefix into the win32 one, and removing it again, changed nothing.
+- Not the registration key: porting the `Software\RT Systems V5\...` key between
+  prefixes, and removing it again, changed nothing. (A copy was salvaged to
+  `kb3lyb-backup-20260825/rtsystems/registration-from-wine-prefix.reg` before those
+  prefixes were deleted; the serial is also retrievable from the RT Systems website,
+  so that file is disposable.)
 - Not the GUI/toolkit — the MFC dialogs render and respond correctly.
 
 **Retried 2026-08-26 after VARA succeeded, applying what worked there:** a fresh
@@ -703,8 +712,7 @@ Two things that cost hours and are worth internalising:
    asking for win32 fails with a misleading *"not supported in wow64 mode"*. A plain
    default prefix is correct, and VARA installed more cleanly in it (rc=0) than in
    the win32 prefix that was built to accommodate the wiki. **VARA does not need
-   `wine-core.i686` at all** — see the note in §6.8c about whether that package
-   still earns its 1.8 GB.
+   `wine-core.i686` at all** — that package has since been removed again; see §6.8b.
 2. **VARA's installer is Inno Setup, so it installs silently.** `/VERYSILENT
    /SUPPRESSMSGBOXES /NORESTART` needs no GUI at all. Attempting to drive the wizard
    with `wtype` is a dead end — virtual-keyboard events do not reach XWayland clients
@@ -829,27 +837,23 @@ picking the project up on the shack machine.
   installed CHIRP 0.4.0 and its 528 models: the Alinco **DR-CS25** and Wouxun
   **KG-UV96** are both absent. Model names confirmed from the programmers' own
   DLL version resources. Wine is load-bearing, not optional.
-- **`wine-core.i686` was dropped. There are TWO separate 32-bit problems, and
-  this package is the answer to exactly one of them.** Read both before acting.
-  The packaging facts are confirmed: `wine-core.x86_64` ships new-WoW64 (819
-  `i386-windows` PE files, zero `i386-unix`); the i686 package adds only the
-  classic `i386-unix` loader, at 186 packages / 1.23 GB. What was never confirmed
-  was the conclusion "so 32-bit Windows binaries still run" — that came from
-  `rpm -ql`, not from running anything.
-  1. **SELinux `execmod` (§6.8).** Blocks *every* 32-bit PE. `wine-core.i686`
-     does NOT fix this — the denial is on the PE files' label, not the loader.
-     Fixed by the policy module instead.
-  2. **new-WoW64 SEH failure.** With §6.8 in place the DRCS25 installer runs, draws
-     its MFC GUI, accepts a serial and an install path, then dies in
-     `err:seh:call_seh_handlers invalid frame` with addresses above 4 GB inside a
-     32-bit process. `wine-core.i686` IS the lever here: without it,
-     `WINEARCH=win32` is refused outright (*"not supported in wow64 mode"*), so a
-     pure 32-bit prefix — which sidesteps the WoW64 exception path entirely —
-     cannot be created at all.
-  So the old advice to "try adding that line back first" was wrong for problem 1
-  and right for problem 2. Do §6.8 first; reach for i686 only against the SEH
-  crash, and expect the 1.23 GB.
+- **`wine-core.i686` is out, and adding it back is not the fix for anything.**
+  It was added on 2026-08-26 and removed again on 2026-08-27 after being measured.
+  The story, so it is not repeated: 32-bit Windows binaries failing is **always**
+  the SELinux `execmod` denial (§6.8), which this package does not touch. It was
+  added to enable a `WINEARCH=win32` prefix as a way past the DRCS25 SEH crash;
+  the win32 prefix made that installer *worse*, and VARA HF then installed and ran
+  perfectly in an ordinary win64 prefix with plain `wine` (§6.9). Fedora's Wine is
+  new-WoW64 and runs 32-bit apps in a 64-bit prefix — `WINEARCH=win32` is neither
+  needed nor supported, and the Pat wiki advice that said otherwise predates it.
+  Cost while present: 186 packages / 1.23 GB. See §6.8b.
 - **The logs need no deduplication.** See §6.7. Do not "tidy" them.
+- **VARA's `0.0.0.0` bind is accepted — do not "fix" it.** VARA HF listens on
+  `0.0.0.0:8300`/`8301` with no authentication, so it is reachable on the LAN and
+  over Tailscale while running. VARA has no bind-address option, so the only lever
+  is a firewall rule. The operator weighed this on 2026-08-27 and chose to leave it.
+  Note it only listens while VARA is actually running, which is per operating
+  session, not at boot.
 - **The Nextcloud mount stays enabled at login — deliberate.**
   `rclone-nextcloud.service` is `enabled`, so `~/Nextcloud` is mounted whenever the
   machine is up and networked. That means the cosign signing key at
@@ -877,14 +881,15 @@ picking the project up on the shack machine.
    frame`, and installs nothing. Adding `mfc100u`/`msvcr100` via
    `winetricks -q vcrun2010` did not change the outcome (it changed the crash from
    heap corruption to the SEH abort, which is progress but not a fix).
-   `wine-core.i686` is now in the image and a real `WINEARCH=win32` prefix works —
-   **but it did not fix this, and made it worse**: in win32 the installer exits
-   cleanly after the language dialog without reaching the serial prompt. Full
-   detail and everything already ruled out is in §6.8c. The original question,
-   serial control-line handling (DTR/RTS) on a cloning cable, has never been
-   reached. Recommendation there is a Windows VM.
-   Prefixes: `~/.local/share/wineprefixes/rtsystems` (win64), `rt32` (win32).
-   Installers in `~/Downloads`; both are 32-bit.
+   **Closest yet, and the remaining step is manual.** In `wineprefixes/rtnew` —
+   win64, **winxp mode**, `vcrun2010` — the installer starts and waits for input
+   rather than crashing or exiting silently. It has no silent-install flag, and its
+   GUI cannot be driven programmatically (`wtype` does not reach XWayland clients),
+   so somebody has to click the wizard:
+   `WINEPREFIX=~/.local/share/wineprefixes/rtnew wine ~/Downloads/DRCS25_Setup.exe`
+   Everything already ruled out is in §6.8c — read it before trying anything.
+   The original question, DTR/RTS control-line handling on a cloning cable, has
+   still never been reached. If the wizard fails too, the answer is a Windows VM.
 2. **N1MM under Wine is expected to fail** (.NET over SQL Server Compact). If real
    N1MM is needed, use a Windows VM — install `org.gnome.Boxes` then, it is
    deliberately not baked. `not1mm` is the Linux alternative: `pipx install not1mm`.

@@ -93,21 +93,18 @@ refute "proj-data regional grids excluded (764 MB of unused datum grids)" \
   sh -c 'rpm -qa "proj-data-*" | grep -q .'
 refute "no General MIDI soundfont on a ham radio PC (142 MB)" \
   rpm -q --quiet fluid-soundfont-gm
-# wine-core.i686 was excluded here until 2026-08-26 to save 1.23 GB, on the
-# reasoning that new WoW64 covers 32-bit PE. That reasoning was never executed,
-# and when it was, it failed: the DRCS25 installer dies in the WoW64 exception
-# path, and WINEARCH=win32 — which avoids that path — is refused outright without
-# the classic i386-unix loader this package provides. The refute below is
-# therefore now an assert. If the RT Systems programmers are ever abandoned for a
-# Windows VM, flip this back and drop the package; do not leave 1.23 GB unexamined.
-assert "wine 32-bit multilib installed (needed for WINEARCH=win32)" \
+# wine-core.i686 is EXCLUDED, and this refute is what keeps it out. It was added on
+# 2026-08-26 to enable a WINEARCH=win32 prefix and removed again on 2026-08-27, once
+# measurement showed nothing needs one: VARA HF runs in an ordinary win64 prefix
+# (SETUP §6.9), the win32 prefix made the RT Systems installer worse rather than
+# better, and the real 32-bit blocker was always SELinux execmod (§6.8), which this
+# package does not touch. Costs ~186 packages / 1.23 GB when present.
+refute "wine 32-bit multilib NOT installed (1.23 GB; new WoW64 covers 32-bit PE)" \
   rpm -q --quiet wine-core.i686
-# The classic 32-bit host loader — the actual reason the package is here. Checking
-# for this rather than the package name keeps the assert honest if Fedora ever
+# ...and this is the assert that makes excluding it SAFE rather than merely smaller.
+# 32-bit Windows binaries must still run, via new WoW64, from the 64-bit package.
+# Checking for the loader rather than the package name keeps this honest if Fedora
 # reshuffles subpackages.
-assert "classic i386-unix loader present (WINEARCH=win32 works)" \
-  sh -c 'test -d /usr/lib64/wine-wow64/wine/i386-unix || test -d /usr/lib/wine-wow64/wine/i386-unix'
-# 32-bit PE support via new WoW64 must ALSO still be present — both paths matter.
 assert "wine still runs 32-bit PE via new WoW64" \
   test -e /usr/lib64/wine-wow64/wine/i386-windows/ntdll.dll
 
