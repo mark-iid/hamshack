@@ -58,10 +58,21 @@ jobs:
 
       - name: Bump image-version in all recipes
         if: steps.detect.outputs.should_bump == 'true'
+        # `latest` is passed through env, NOT interpolated into the script with
+        # ${{ }}. Expression interpolation is textual: the runner pastes the value
+        # into the shell source before bash sees it, so a value containing a quote
+        # or a `;` becomes script rather than data. Here the value is grep'd down
+        # to [0-9]+ and comes from dl.fedoraproject.org, so it is not currently
+        # exploitable — but the safety is then a property of a grep three steps
+        # away, which is exactly the kind of reasoning that stops being true after
+        # an innocent edit. Via env it is a shell variable and cannot be anything
+        # but data. This is also what CodeQL's actions analysis flags.
+        env:
+          LATEST: ${{ steps.detect.outputs.latest }}
         run: |
           set -euo pipefail
           for f in recipes/recipe.yml recipes/codec-test.yml recipes/ham-test.yml; do
-            sed -i "s/^image-version: .*/image-version: ${{ steps.detect.outputs.latest }}/" "$f"
+            sed -i "s/^image-version: .*/image-version: ${LATEST}/" "$f"
           done
 
       - name: Open PR

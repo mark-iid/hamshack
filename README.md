@@ -127,6 +127,7 @@ For a clean install, generate an installer ISO — see SETUP §4 and [`vm/`](vm/
 | `files/scripts/image-assert.sh` | Build-time postconditions. |
 | `vm/` | Local build + VM test + ISO build tooling. |
 | `.github/workflows/` | Nightly build and the Fedora version-bump PR workflow. |
+| `.github/apply-security-settings.sh` | Repo security settings, version-controlled and re-runnable. |
 
 ## Verification
 
@@ -135,6 +136,12 @@ Images are signed with [cosign](https://github.com/sigstore/cosign):
 ```bash
 cosign verify --key cosign.pub ghcr.io/mark-iid/kb3lyb-shack
 ```
+
+That key is the reason this repo has a real threat model: the machines trust
+whatever it signs and stage it without asking. [SECURITY.md](SECURITY.md) sets
+out what follows from that, and
+[`.github/apply-security-settings.sh`](.github/apply-security-settings.sh) keeps
+the GitHub-side settings in the tree rather than in a web UI.
 
 ## License
 

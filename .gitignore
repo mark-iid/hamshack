@@ -19,3 +19,14 @@ __pycache__/
 *.qcow2
 *.tar
 *.tar.gz
+
+# Working-directory droppings from ham apps launched with the repo as CWD.
+# TLF writes .paras/.bmdata.dat/tlfmarkers/<contest>.log on first run; the RT
+# Systems updater writes UpdateLog.Txt under Wine. All of these got committed by
+# accident once (86f678b, ea7c331) — they are per-run state, not configuration,
+# and nothing in the image reads them.
+.paras
+.bmdata.dat
+tlfmarkers
+*.log
+UpdateLog.Txt
