@@ -48,7 +48,13 @@ Not aspirations — these are in the tree and you can check them:
    (DESIGN §2.6).
 4. **The private key is gitignored** (`cosign.key`, `cosign.private`), with secret
    scanning push protection as the backstop for the day it gets saved under some
-   other name.
+   other name. **Do not lean on that backstop.** Push protection covers generic
+   PEM key blobs — `ec_private_key`, `rsa_private_key`, `generic_private_key` —
+   for free on a public repo. But cosign does not write a stock PEM header; it
+   writes `-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----`, and whether GitHub's
+   generic regex matches that has not been tested here. The wider
+   `non_provider_patterns` net needs GitHub Secret Protection, which this repo
+   does not have. Treat the gitignore as the control and push protection as luck.
 5. **`main` cannot be force-pushed or deleted**, so the history the signature is
    taken over cannot be quietly rewritten. Note what this deliberately does *not*
    do: it does not require pull requests. Self-approving your own PR is a ritual,

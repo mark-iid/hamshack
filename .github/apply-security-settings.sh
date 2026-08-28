@@ -35,13 +35,30 @@ echo "==> $REPO"
 # the half that matters — plain secret scanning tells you after the fact, and for
 # a signing key "after the fact" means rotating the key and re-signing.
 #
-# non_provider_patterns catches generic private-key blobs, which is exactly the
-# shape a leaked cosign key has (it is not a recognisable vendor token).
+# GENERIC PRIVATE KEYS ARE COVERED FOR FREE on a public repo: ec_private_key,
+# rsa_private_key, openssh_private_key and generic_private_key all carry push
+# protection at no cost. So a stock PEM key blob does get blocked at push time.
+#
+# non_provider_patterns is a WIDER net and needs GitHub Secret Protection, which
+# this repo does not have — it stays "disabled" no matter what we send. Recorded
+# here so nobody spends an afternoon on it. The gap that leaves is narrow but
+# real, and it is written up in SECURITY.md rather than papered over.
+#
+# READ THE STATE BACK, do not trust the 200. GitHub accepts a PATCH enabling a
+# feature your plan does not include and returns success with the field still
+# "disabled" — no error, no warning. The first version of this script printed a
+# green tick for non_provider_patterns while the repo had it off. Anything that
+# reports success without reading back the result is how a security setting ends
+# up believed-on and actually-off.
 echo "-- secret scanning"
 api -X PATCH "repos/$REPO" -F 'security_and_analysis[secret_scanning][status]=enabled' \
   -F 'security_and_analysis[secret_scanning_push_protection][status]=enabled' \
   -F 'security_and_analysis[secret_scanning_non_provider_patterns][status]=enabled' \
-  >/dev/null && ok "scanning + push protection + generic patterns enabled"
+  >/dev/null 2>&1 || true
+for f in secret_scanning secret_scanning_push_protection secret_scanning_non_provider_patterns; do
+  st=$(api "repos/$REPO" --jq ".security_and_analysis.${f}.status // \"absent\"")
+  if [ "$st" = enabled ]; then ok "$f: $st"; else warn "$f: $st"; fi
+done
 
 # --- 2. Dependabot ----------------------------------------------------------
 # Modest value here: the only ecosystem in this repo is github-actions, since
