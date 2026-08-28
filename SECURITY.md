@@ -34,7 +34,17 @@ Not aspirations — these are in the tree and you can check them:
 1. **Actions are pinned to commit SHAs, never tags** (`build.yml`,
    `fedora-version-bump.yml`). A tag is mutable by whoever owns the repo it
    points into; a SHA is not. Dependabot bumps the SHA and the trailing version
-   comment together, weekly and grouped.
+   comment together, weekly and grouped. This is now **enforced by policy**
+   (`sha_pinning_required`), not just observed by habit — an unpinned `uses:`
+   fails the workflow rather than shipping quietly.
+
+   Worth knowing how far one pin reaches: `blue-build/github-action` is a
+   *composite* that internally calls six more actions (free-disk-space,
+   setup-buildx, cosign-installer, setup-qemu, slsa-verifier, checkout). So the
+   real trust set is nine repos, not three. Pinning blue-build to a SHA freezes
+   its `action.yml` and therefore its six pins along with it — which is the
+   reason one pin covers the whole chain. All nine were verified full-length SHAs
+   on 2026-08-28.
 2. **Dependabot PRs are excluded from the build job** (`if: github.actor !=
    'dependabot[bot]'`). A PR that bumps a third-party action must not get to run
    that new action's code with the signing key before a human has read the diff.

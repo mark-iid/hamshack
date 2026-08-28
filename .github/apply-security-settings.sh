@@ -111,6 +111,31 @@ api -X PUT "repos/$REPO/actions/permissions/workflow" \
   -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false \
   >/dev/null && ok "read-only by default, cannot approve PRs"
 
+# --- 5b. Require SHA-pinned actions ----------------------------------------
+# Every `uses:` in this repo is already pinned to a full-length commit SHA, by
+# hand and by convention (see the note in build.yml). This makes the convention
+# ENFORCED: an unpinned action now fails the workflow instead of quietly
+# shipping. Convention holds until the day someone is in a hurry; policy doesn't
+# care how busy anyone is.
+#
+# Safe to switch on here — verified before enabling that all nine references
+# comply: the 3 direct ones, plus the 6 that blue-build/github-action calls
+# internally (it is a composite: free-disk-space, setup-buildx, cosign-installer,
+# setup-qemu, slsa-verifier, checkout). Those six are pinned by blue-build, and
+# our SHA pin on blue-build freezes its action.yml along with them — which is why
+# one pin covers the whole chain.
+#
+# This is NOT the same control as an allow-list. It governs HOW an action is
+# referenced, not WHICH actions may run. Adding an allow-list is still open; see
+# the note at the end.
+echo "-- SHA pinning policy"
+api -X PUT "repos/$REPO/actions/permissions" --input - >/dev/null <<'JSON'
+{ "enabled": true, "allowed_actions": "all", "sha_pinning_required": true }
+JSON
+pin=$(api "repos/$REPO/actions/permissions" --jq '.sha_pinning_required')
+if [ "$pin" = true ]; then ok "actions must be pinned to a full-length SHA"
+else warn "sha_pinning_required: $pin"; fi
+
 # --- 6. Fork PR approval ----------------------------------------------------
 # Fork PRs never receive secrets — GitHub withholds them — so the signing key is
 # not at risk here. What this stops is a stranger's PR spending 45 minutes of
@@ -154,10 +179,18 @@ printf '  private_vulnerability_reporting: %s\n' \
   "$(api "repos/$REPO/private-vulnerability-reporting" --jq '.enabled')"
 printf '  code_scanning_default_setup: %s\n' \
   "$(api "repos/$REPO/code-scanning/default-setup" --jq '.state' 2>/dev/null || echo unknown)"
+printf '  sha_pinning_required: %s\n' \
+  "$(api "repos/$REPO/actions/permissions" --jq '.sha_pinning_required')"
 echo
-echo "Not automated, because it needs a judgement call each time:"
-echo "  * Actions allow-list (Settings > Actions > Allow select actions). Pinning"
-echo "    to SHAs already blocks the mutable-tag attack; an allow-list additionally"
-echo "    stops a NEW unreviewed action being introduced. Costs a settings edit"
-echo "    every time a legitimate action is added. Current set: blue-build/,"
-echo "    actions/, peter-evans/create-pull-request, github/codeql-action."
+echo "Still open, deliberately — it needs a judgement call, not a default:"
+echo "  * Actions ALLOW-LIST (allowed_actions: selected). Different control from"
+echo "    SHA pinning: pinning governs how an action is referenced, the allow-list"
+echo "    governs which may run at all. It is the only thing that stops a NEW"
+echo "    unreviewed 'uses:' appearing in the job that holds the signing key."
+echo "    Not enabled because GitHub does not document whether the policy is"
+echo "    enforced against actions called INSIDE a composite. blue-build is a"
+echo "    composite calling 6 more, so the list is either 3 entries or 9, and if"
+echo "    it is 9 a routine blue-build bump breaks the build at an unrelated"
+echo "    moment. To settle it: set allowed_actions=selected with the 3 direct"
+echo "    entries, run a workflow_dispatch build, and see. A red build costs only"
+echo "    'no new image today' (DESIGN §5), so the experiment is cheap."
