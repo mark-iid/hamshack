@@ -158,6 +158,19 @@ assert "gvfs WebDAV backend present" test -x /usr/libexec/gvfsd-dav
 assert "rclone present (the mount path that needs no GVFS at all)" \
   command -v rclone
 
+# --- Timezone -----------------------------------------------------------------
+# Asserting the LINK, not just that the time looks right. A copied TZif file
+# keeps glibc resolving times correctly while `timedatectl status` reports the
+# zone as n/a — working enough to pass a casual look, broken enough to waste an
+# evening. This is the failure mode set-timezone.sh exists to prevent, so it is
+# the one worth a postcondition.
+assert "/etc/localtime is a symlink (a copied TZif leaves timedatectl zone-blind)" \
+  test -L /etc/localtime
+# readlink -f so this holds whether the link is written relative (as
+# set-timezone.sh writes it) or absolute (as a later timedatectl might).
+assert "timezone is America/New_York" \
+  test "$(readlink -f /etc/localtime)" = /usr/share/zoneinfo/America/New_York
+
 # --- Session -----------------------------------------------------------------
 assert "niri installed"                          rpm -q --quiet niri
 # Not optional on this machine: fldigi is FLTK/X11 and chirp+wx is wxPython.
