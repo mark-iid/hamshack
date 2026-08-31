@@ -49,11 +49,6 @@ assert_file_has() {
   if [ -r "$2" ] && grep -Eq "$3" "$2"; then pass "$1"; else fail "$1 ($2)"; fi
 }
 
-# assert_file_has <description> <file> <extended-regex>
-assert_file_has() {
-  if [ -r "$2" ] && grep -Eq "$3" "$2"; then pass "$1"; else fail "$1 ($2)"; fi
-}
-
 echo "image-assert: checking postconditions"
 
 # --- Codecs: the INTEL path, not the laptop's AMD one ------------------------
