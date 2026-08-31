@@ -238,7 +238,17 @@ modules:
           - org.mozilla.firefox
           - io.github.ungoogled_software.ungoogled_chromium
           - com.bitwarden.desktop
-          - com.nextcloud.desktopclient.nextcloud
+          # NO com.nextcloud.desktopclient.nextcloud. Nextcloud is MOUNTED here,
+          # not synced (rclone + fuse3 above, DESIGN §2.6) — an 88 GB tree against
+          # a 238 GB disk was never going to be a sync folder. So the client was
+          # redundant, and it was not passive about it: its desktop file carries
+          # `Implements=org.freedesktop.CloudProviders` plus a D-Bus-activatable
+          # BusName, and Thunar links libcloudproviders. Opening ANY Thunar window
+          # made the collector ask for that bus name, and D-Bus started the client.
+          # No autostart file is involved, which is why it looks unexplained.
+          # Removing it from this list is the only durable fix: system-flatpak-setup
+          # re-runs `flatpak install` over this list on every boot, so a local
+          # `flatpak uninstall` is undone 30 seconds into the next one.
           - com.slack.Slack
           - com.discordapp.Discord
           - io.github.dweymouth.supersonic
