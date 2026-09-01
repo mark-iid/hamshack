@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+"""Invert scroll direction for ONE input device, below the compositor.
+
+WHY THIS EXISTS. niri configures libinput per device CLASS -- `touchpad`,
+`mouse`, `trackpoint` -- and has no per-device block (verified against niri
+26.04: an `input { device "name" { ... } }` node is a KDL parse error). That is
+fine until two pointers on the same machine want different scroll directions.
+
+Here they do. The SINO WEALTH keyboard's tiny touchpad does its scrolling in
+FIRMWARE and emits REL_WHEEL directly, so libinput sees a mouse, not a touchpad:
+
+    Capabilities:    keyboard pointer        <- no touchpad capability
+    Scroll methods:  button                  <- no 2fg/edge, the pad does it
+    PROP=0                                   <- not a buttonpad, not a stick
+
+So `touchpad { natural-scroll }` would never reach it, and `mouse
+{ natural-scroll }` would reach it AND the Logitech M570 trackball, which
+should keep scrolling the way it does. There is no niri config that expresses
+"this device only".
+
+WHAT THIS DOES. Grabs the device exclusively, republishes it as a uinput clone
+with identical capabilities, and negates the wheel axes on the way through.
+The compositor sees only the clone, so this needs no compositor support at all.
+
+FAILURE MODE IS THE SAFE ONE. If this process dies or is never started, the
+kernel drops the grab and the original device goes straight back to the
+compositor -- working normally, just with un-inverted scrolling. There is no
+state where the pad stops working because this is broken.
+
+Deliberately NOT a general remapper. It takes one device path from the udev-
+triggered unit and refuses anything without a wheel axis, so a kernel or
+firmware change that renumbers the event nodes produces a clear refusal in the
+journal rather than a silently grabbed keyboard.
+"""
+
+import errno
+import signal
+import sys
+
+import evdev
+from evdev import ecodes
+
+# Both axes, because that is what libinput's natural-scroll does -- it inverts
+# horizontal along with vertical. Matching it keeps this device consistent with
+# anything later configured the ordinary way.
+#
+# Hi-res codes are looked up defensively: libinput prefers REL_WHEEL_HI_RES
+# when the device offers it, so inverting only the low-res code would leave
+# scrolling unchanged on exactly the hardware that has both.
+_WHEEL_NAMES = ("REL_WHEEL", "REL_WHEEL_HI_RES", "REL_HWHEEL", "REL_HWHEEL_HI_RES")
+INVERT = frozenset(
+    code for code in (getattr(ecodes, n, None) for n in _WHEEL_NAMES) if code is not None
+)
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit("usage: kb3lyb-natural-scroll /dev/input/eventN")
+    path = argv[1]
+
+    try:
+        dev = evdev.InputDevice(path)
+    except OSError as e:
+        sys.exit(f"kb3lyb-natural-scroll: cannot open {path}: {e}")
+
+    # Refuse a device with no wheel. This is the guard against the udev rule
+    # matching a renumbered node: grabbing the keyboard half of this same
+    # keyboard would swallow every keystroke, and doing that silently would be
+    # very hard to diagnose from inside the resulting broken session.
+    if ecodes.REL_WHEEL not in dev.capabilities().get(ecodes.EV_REL, []):
+        sys.exit(f"kb3lyb-natural-scroll: {path} ({dev.name}) has no REL_WHEEL; refusing")
+
+    # Clone first, grab second. from_device() copies the full capability set, so
+    # the clone advertises the keys and buttons this node also carries -- not
+    # just the pointer axes. Grabbing before the clone exists would blank the
+    # device for the moment in between.
+    ui = evdev.UInput.from_device(dev, name=f"{dev.name} (natural scroll)")
+
+    try:
+        dev.grab()
+    except OSError as e:
+        ui.close()
+        sys.exit(f"kb3lyb-natural-scroll: cannot grab {path}: {e}")
+
+    print(f"kb3lyb-natural-scroll: {dev.name} [{path}] -> {ui.device.path}", flush=True)
+
+    # SIGTERM must unwind through the finally below rather than killing us where
+    # we stand, so the grab is dropped and the clone removed in an orderly way
+    # when systemd stops the unit.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+    try:
+        for ev in dev.read_loop():
+            value = -ev.value if ev.type == ecodes.EV_REL and ev.code in INVERT else ev.value
+            # Every event is forwarded verbatim, SYN_REPORT included. Replaying
+            # the original synchronisation events preserves the device's own
+            # framing instead of imposing one -- multi-axis reports stay in the
+            # single report the hardware sent them in.
+            ui.write(ev.type, ev.code, value)
+    except OSError as e:
+        # ENODEV is the device being unplugged. That is a normal end for this
+        # process, not a fault: exit 0 so systemd does not treat a routine
+        # unplug as a failure and start restarting into nothing.
+        if e.errno != errno.ENODEV:
+            raise
+    finally:
+        try:
+            dev.ungrab()
+        except OSError:
+            pass
+        ui.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

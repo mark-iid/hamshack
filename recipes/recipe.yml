@@ -211,6 +211,18 @@ modules:
         # and releasing almost daily; baking a fast-moving pip app into a signed
         # image would mean rebuilding the image to take a bugfix.
         - pipx
+        # python3-evdev — the one dependency of kb3lyb-natural-scroll, which
+        # gives the SINO WEALTH keyboard's touchpad natural scrolling without
+        # touching the Logitech trackball. niri configures libinput per device
+        # CLASS and has no per-device block, and that pad enumerates as a mouse
+        # rather than a touchpad, so there is no compositor setting that
+        # separates the two. See the header of the script.
+        #
+        # A packaged dependency rather than fetching evsieve or
+        # interception-tools, neither of which Fedora ships: a new out-of-repo
+        # binary in the signed image is SECURITY.md threat #2, and this needs
+        # ~40 lines of Python against a library already in the distro.
+        - python3-evdev
 
   # Evolution (mail) — layered NATIVE rather than flatpak. Native gives reliable
   # Microsoft 365 / Graph OAuth against the system Secret Service keyring and keeps

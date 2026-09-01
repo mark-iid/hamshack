@@ -1,0 +1,26 @@
+# SINO WEALTH USB touchpad keyboard (258a:6a88) — start the per-device scroll
+# inverter when the pointer half of it appears.
+#
+# WHY A UDEV RULE AND NOT A PLAIN ENABLED UNIT: this is a USB keyboard that gets
+# plugged and unplugged, and its event node number is whatever the kernel hands
+# out that boot. A statically enabled service would have to guess the path at
+# boot and would be wrong the first time anything else enumerated ahead of it.
+# udev knows the node, so it passes it in as the instance name.
+#
+# ID_INPUT_MOUSE=="1" IS LOAD-BEARING. This keyboard presents TWO event nodes
+# under the same VID/PID:
+#
+#   event7  ID_INPUT_KEYBOARD=1               the keys
+#   event8  ID_INPUT_MOUSE=1, ID_INPUT_KEY=1  the touchpad (plus some keys)
+#
+# Only the second one has a wheel. Without this match the rule would fire for
+# both and the inverter would be handed the keyboard — which it refuses (it
+# checks for REL_WHEEL before grabbing anything), but the refusal would be a
+# recurring journal error rather than a thing that never happens.
+#
+# Matched on VID/PID rather than the device name string: the name is a firmware
+# field and these no-name pads are re-badged freely, while the ids are what the
+# udev database is keyed on anyway.
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", \
+  ENV{ID_VENDOR_ID}=="258a", ENV{ID_MODEL_ID}=="6a88", ENV{ID_INPUT_MOUSE}=="1", \
+  TAG+="systemd", ENV{SYSTEMD_WANTS}+="kb3lyb-natural-scroll@%k.service"

@@ -166,6 +166,33 @@ assert "/etc/localtime is a symlink (a copied TZif leaves timedatectl zone-blind
 assert "timezone is America/New_York" \
   test "$(readlink -f /etc/localtime)" = /usr/share/zoneinfo/America/New_York
 
+# --- Per-device natural scrolling --------------------------------------------
+# niri has no per-device input config (an `input { device "..." { } }` node is a
+# KDL parse error in 26.04), and the SINO WEALTH pad enumerates as a mouse, so
+# `mouse { natural-scroll }` would drag the trackball along with it. The inverter
+# is the way out, and it is three separate pieces that each fail silently on
+# their own: no library and it dies on import, no udev rule and it never starts,
+# no unit and udev has nothing to reach for.
+assert "python3-evdev present (kb3lyb-natural-scroll imports it)" \
+  rpm -q --quiet python3-evdev
+assert "kb3lyb-natural-scroll installed and executable" \
+  test -x /usr/bin/kb3lyb-natural-scroll
+assert "natural-scroll unit template present" \
+  test -r /etc/systemd/system/kb3lyb-natural-scroll@.service
+# Two patterns, not one spanning both: the rule is written with line
+# continuations and grep is line-based, so a combined regex silently never
+# matches. (It did not silently do anything -- it failed here first.)
+assert_file_has "udev rule matches the POINTER node only, not the keyboard half" \
+  /etc/udev/rules.d/60-kb3lyb-natural-scroll.rules \
+  'ENV\{ID_INPUT_MOUSE\}=="1"'
+assert_file_has "udev rule starts the inverter unit" \
+  /etc/udev/rules.d/60-kb3lyb-natural-scroll.rules \
+  'SYSTEMD_WANTS.*kb3lyb-natural-scroll@'
+# The script is Python, so a syntax error is a runtime failure at plug-in time
+# rather than a build failure. Compile it here instead.
+assert "kb3lyb-natural-scroll compiles" \
+  python3 -m py_compile /usr/bin/kb3lyb-natural-scroll
+
 # --- Session -----------------------------------------------------------------
 assert "niri installed"                          rpm -q --quiet niri
 # Not optional on this machine: fldigi is FLTK/X11 and chirp+wx is wxPython.

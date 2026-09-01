@@ -1,0 +1,34 @@
+[Unit]
+Description=Natural scrolling for /dev/input/%I (per-device, below the compositor)
+Documentation=file:///usr/bin/kb3lyb-natural-scroll
+# Started by 60-kb3lyb-natural-scroll.rules, which supplies the event node as
+# the instance name. BindsTo so the unit goes away with the device: on unplug
+# systemd stops it rather than leaving a process holding a grab on a node the
+# kernel has already reused for something else.
+BindsTo=dev-input-%i.device
+After=dev-input-%i.device
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kb3lyb-natural-scroll /dev/input/%I
+# Needs the real /dev/input and /dev/uinput; everything else can go. The grab
+# and the uinput clone are the whole job.
+DevicePolicy=closed
+DeviceAllow=/dev/uinput rw
+DeviceAllow=char-input rw
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+# No Restart=. A failure here means the device was refused or could not be
+# grabbed, and both are permanent for this plug-in — restarting would only turn
+# one clear journal line into a loop. Unplug exits 0 by design.
+
+# NO [Install] SECTION ON PURPOSE. This is started by udev via SYSTEMD_WANTS,
+# never enabled. `systemctl enable` on a template with no default instance is
+# meaningless here, and adding one would create a second, path-guessing way for
+# it to start.
