@@ -311,7 +311,11 @@ karg. It cannot prove the kernel received it, because that is host state, which 
 the same boundary described in the image-assert header. The host-side step is in
 SETUP §6.0c.
 
-Inherited from the laptop image, unchanged:
+---
+
+## 8. Build & update model
+
+### 8.1 Inherited from the laptop image, unchanged
 
 - Nightly CI build against a **pinned** Fedora version; the version bump arrives
   as an automated PR, never a floating tag.
@@ -319,10 +323,60 @@ Inherited from the laptop image, unchanged:
   good signed deployment. That safety property is the entire reason for building
   in CI rather than on the machine.
 - `rpm-ostreed-automatic` **stages** updates (`policy=stage`); they take effect on
-  the next boot.
+  the next boot — which §8.2 now arranges to happen on its own.
 - `recipes/ham-test.yml` and `recipes/codec-test.yml` depsolve the two fragile
   modules in isolation, so a version bump breaks in a 90-second targeted build
   rather than a 20-minute full one.
+
+### 8.2 Applying a staged image while nobody is logged in
+
+Staging is only half an update path. `rpm-ostreed.conf(5)` is explicit that
+`policy=stage` "leaves initiating a reboot to other automation tools", and until
+2026-10-01 this image had no such tool: a pulled image sat unapplied until
+someone happened to reboot. On a shack machine that is left running, that is
+weeks — long enough for `kb3lyb-image-age` to start warning about an image that
+had in fact been fetched successfully and was only waiting for a boot. Two
+mechanisms that both worked, reporting a machine that looked stuck.
+
+`kb3lyb-reboot-when-idle.timer` closes it. Every 15 minutes the script checks two
+things and reboots only if both hold: a deployment is **staged**, and **no
+session belongs to a person**.
+
+The second check is the whole design, and logind's session classes are what make
+it possible to write:
+
+| class | means | counts as a person? |
+|---|---|---|
+| `user`, `user-early`, `user-incomplete` | a login — graphical **or** ssh | yes |
+| `greeter` | greetd sitting at gtkgreet | **no** |
+| `manager` | the per-user systemd manager (systemd ≥ 256) | no |
+
+So sitting at the login screen reads as idle, which is the state this exists to
+act on, while an ssh session blocks the reboot — this machine is administered
+over Tailscale, and pulling it out from under a remote session is precisely the
+surprise being avoided. Linger is off for the user account, so nothing of a
+logged-out session survives to confuse the count.
+
+**Why not `AutomaticUpdatePolicy=apply`.** Its documented behaviour is that it
+"will currently always initiate a reboot", with no notion of whether anyone is in
+front of the machine. That is a reboot in the middle of a QSO. The policy stays
+`stage`; `image-assert.sh` asserts that it does, and now also asserts that the
+reboot half is present and enabled.
+
+**The race is known and accepted.** Someone can walk up to the greeter and start
+typing between the check and the reboot. The script re-checks after a 30-second
+settle window, which narrows it to seconds but cannot close it. The cost when it
+loses is a reboot at a login screen, where there is by definition nothing to lose.
+
+**The escape hatch is standard.** `systemctl reboot` defaults to
+`--check-inhibitors=auto`, under which logind still refuses on an active block
+lock — so `systemd-inhibit --what=shutdown bash` pins the machine for as long as
+that shell lives. No custom flag file, and the same trick the rpm-ostree man page
+already documents for suppressing automatic updates.
+
+**Shack only.** Do not back-port this to the laptop image. A laptop is closed and
+suspended rather than left at a greeter, so "no sessions" there is a much weaker
+statement about whether anybody wants the machine.
 
 ---
 

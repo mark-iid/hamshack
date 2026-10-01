@@ -314,6 +314,12 @@ modules:
         - tailscaled.service
         - sshd.service            # admin path for this machine (over Tailscale)
         - rpm-ostreed-automatic.timer
+        # Stage-and-stop is only half an update path: rpm-ostreed leaves the
+        # reboot to "other automation tools" (rpm-ostreed.conf(5)), and without
+        # one a staged image can sit unapplied for weeks on a machine that is
+        # left running. This applies it the next time nobody is logged in.
+        # DESIGN §8.2. Shack only — not for the laptop image.
+        - kb3lyb-reboot-when-idle.timer
         - flatpak-update.timer
         # One-time migration for a machine whose /etc/group predates the pinned
         # GIDs. Idempotent — once every pinned group holds its pinned number this

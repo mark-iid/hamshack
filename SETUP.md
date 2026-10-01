@@ -1089,6 +1089,9 @@ Still to capture:
 ## 8. Updates & rollback
 
 - `rpm-ostreed-automatic.timer` **stages** updates; they apply on next boot.
+- `kb3lyb-reboot-when-idle.timer` supplies that boot. Every 15 min it reboots the
+  machine **only** if an image is staged *and* no session belongs to a person —
+  greetd's greeter does not count, an ssh login does. Full account in DESIGN §8.2.
 - `flatpak-update.timer` (system) and `flatpak-update-user.timer` (user) keep
   Flatpaks current — the user one must stay a *user* unit, since polkit only
   guards the system installation.
@@ -1099,6 +1102,22 @@ Still to capture:
 rpm-ostree status              # what is deployed / staged
 rpm-ostree rollback            # previous deployment
 systemctl reboot
+```
+
+Checking on the automatic reboot, or stopping it:
+
+```bash
+systemctl list-timers kb3lyb-reboot-when-idle.timer
+kb3lyb-reboot-when-idle --dry-run     # says what it would do, changes nothing
+journalctl -u kb3lyb-reboot-when-idle -n 20
+loginctl list-sessions --json=short | jq   # `class` is what it counts on
+
+# Pin the machine while working on it — logind honours block inhibitors on the
+# reboot path, so this suppresses it for as long as the shell lives:
+systemd-inhibit --what=shutdown --why="debugging" bash
+
+# Off for good on this machine (the image will keep re-enabling it otherwise):
+sudo systemctl disable --now kb3lyb-reboot-when-idle.timer
 ```
 
 Timestamped tags are published alongside `latest` for pinning.

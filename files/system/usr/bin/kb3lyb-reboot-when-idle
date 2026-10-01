@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# kb3lyb-reboot-when-idle — apply a staged image while nobody is logged in.
+#
+# WHY. `AutomaticUpdatePolicy=stage` (see /etc/rpm-ostreed.conf) downloads and
+# unpacks the nightly image and then stops, on purpose: the man page's words are
+# that stage "leaves initiating a reboot to other automation tools". This is that
+# tool. Without it the staged deployment sits there until someone happens to
+# reboot, which on a shack machine that is left running can be weeks — long
+# enough for kb3lyb-image-age to start complaining about an image that was in
+# fact pulled successfully and is simply waiting for a boot.
+#
+# WHY NOT AutomaticUpdatePolicy=apply. Its documented behaviour is that it "will
+# currently always initiate a reboot" — no notion of whether a human is in front
+# of the machine. That is a reboot in the middle of a QSO. The whole value of
+# this script is the second check below.
+#
+# WHAT COUNTS AS "NOBODY IS LOGGED IN". logind classes sessions, and only three
+# classes mean a person:
+#
+#   user, user-early, user-incomplete   a login (graphical OR ssh)
+#   greeter                             greetd sitting at gtkgreet — NOT a person
+#   manager                             the per-user systemd manager, which on
+#                                       systemd >= 256 is its own session
+#
+# So this counts user* sessions and requires zero. That deliberately makes an ssh
+# session block the reboot (this machine is administered over Tailscale, and
+# yanking the box out from under a remote session is exactly the surprise being
+# avoided), and deliberately does NOT count the greeter, which is the state this
+# whole script exists to act on.
+#
+# THE RACE, AND WHY IT IS ACCEPTED. Someone can walk up to the greeter and start
+# typing between the check and the reboot. The re-check below narrows it to a few
+# seconds; it cannot close it. The cost when it loses is a reboot at a login
+# screen, where by definition there is nothing to lose — you type your password
+# thirty seconds later instead.
+#
+# Inhibitors are honoured without asking for it: `systemctl reboot` defaults to
+# --check-inhibitors=auto, under which logind itself still refuses on an active
+# block lock. So `systemd-inhibit --what=shutdown bash` suppresses this for as
+# long as that shell lives, which is the documented way to pin the machine while
+# debugging.
+#
+# SHACK ONLY. Do not back-port this to the laptop image: a laptop is closed and
+# suspended rather than left at a greeter, and "no sessions" there is a much
+# weaker statement about whether anybody wants the machine.
+#
+#   kb3lyb-reboot-when-idle            # reboot if staged + nobody home
+#   kb3lyb-reboot-when-idle --dry-run  # say what it would do, change nothing
+#
+# POSIX-ish sh + jq for the same reason as kb3lyb-image-age: the only python3
+# here comes from brew, i.e. from $HOME, and a system unit cannot depend on a
+# per-user install.
+set -uo pipefail
+
+dry_run=0
+[ "${1:-}" = "--dry-run" ] && dry_run=1
+
+say() { printf 'kb3lyb-reboot-when-idle: %s\n' "$1"; }
+
+status=$(rpm-ostree status --json 2>/dev/null) || {
+  say "could not read rpm-ostree status — nothing to do"
+  exit 0
+}
+
+# A transaction in flight means a stage is still being written, or a rebase is
+# under way. Neither is a moment to reboot; the next timer tick is 15 minutes
+# away and the work will have finished by then.
+if [ "$(printf '%s' "$status" | jq -r '.transaction // "null"')" != "null" ]; then
+  say "rpm-ostree transaction in progress — leaving it alone"
+  exit 0
+fi
+
+staged=$(printf '%s' "$status" | jq '[.deployments[] | select(.staged == true)] | length')
+if [ "${staged:-0}" -eq 0 ]; then
+  say "no staged deployment — nothing to apply"
+  exit 0
+fi
+
+version=$(printf '%s' "$status" | jq -r 'first(.deployments[] | select(.staged == true)) | .version // "unknown"')
+
+# Count only the classes that mean a human. See the header.
+sessions_busy() {
+  loginctl list-sessions --json=short 2>/dev/null |
+    jq '[.[] | select(.class == "user" or .class == "user-early" or .class == "user-incomplete")] | length'
+}
+
+busy=$(sessions_busy)
+if [ -z "$busy" ]; then
+  # loginctl or jq failed. Refusing to guess: an unreadable session list must
+  # never be read as "empty", which is the one mistake that reboots a machine
+  # with someone sitting at it.
+  say "could not read the session list — not rebooting"
+  exit 0
+fi
+if [ "$busy" -gt 0 ]; then
+  say "staged ${version}, but ${busy} user session(s) present — waiting"
+  exit 0
+fi
+
+if [ "$dry_run" -eq 1 ]; then
+  say "would reboot into staged ${version} (no user sessions)"
+  exit 0
+fi
+
+# Second look. Cheap, and it covers the common shape of the race: someone
+# arriving at the greeter while this tick is running.
+sleep 30
+busy=$(sessions_busy)
+if [ "${busy:-1}" -ne 0 ]; then
+  say "a session appeared during the settle window — not rebooting"
+  exit 0
+fi
+
+say "staged ${version} and nobody logged in — rebooting"
+systemctl reboot

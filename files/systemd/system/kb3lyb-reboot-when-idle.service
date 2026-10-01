@@ -1,0 +1,15 @@
+[Unit]
+Description=Apply a staged image when nobody is logged in (DESIGN §8.2)
+Documentation=man:rpm-ostreed.conf(5)
+# Only meaningful on an ostree/bootc system. Same guard rpm-ostreed-automatic
+# uses, and it keeps this inert if the unit ever lands somewhere it should not.
+ConditionPathExists=/run/ostree-booted
+
+[Service]
+Type=oneshot
+# No network dependency: this reads local deployment state and reboots. The
+# pull already happened, in rpm-ostreed-automatic.
+ExecStart=/usr/bin/kb3lyb-reboot-when-idle
+# The script's settle window is 30s; give it room without letting a wedged
+# rpm-ostreed hold the unit open indefinitely.
+TimeoutStartSec=5min

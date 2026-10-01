@@ -309,6 +309,23 @@ assert_file_has "console blanking karg present (greeter would otherwise sit lit)
 assert_file_has "rpm-ostreed stages updates rather than applying them" \
   /etc/rpm-ostreed.conf '^AutomaticUpdatePolicy=stage'
 
+# Staging is only half a path — rpm-ostreed leaves the reboot to "other
+# automation tools" (rpm-ostreed.conf(5)), and here that tool is ours. Each piece
+# fails silently on its own: no script and the unit dies at ExecStart with the
+# staged image still sitting there; no jq and the script cannot read either of
+# the two states it checks; shipped-but-never-enabled and nothing runs at all,
+# which looks exactly like "no update was staged".
+assert "kb3lyb-reboot-when-idle installed and executable" \
+  test -x /usr/bin/kb3lyb-reboot-when-idle
+assert "kb3lyb-reboot-when-idle parses" \
+  bash -n /usr/bin/kb3lyb-reboot-when-idle
+assert "jq present (kb3lyb-reboot-when-idle and kb3lyb-image-age both parse JSON with it)" \
+  rpm -q --quiet jq
+assert "reboot-when-idle units present" \
+  test -r /usr/lib/systemd/system/kb3lyb-reboot-when-idle.timer
+assert "reboot-when-idle timer is enabled, not merely shipped" \
+  test -L /etc/systemd/system/timers.target.wants/kb3lyb-reboot-when-idle.timer
+
 # --- Pinned GIDs -------------------------------------------------------------
 # rtl-sdr's udev rules use GROUP="rtlsdr", a dynamically allocated group. Read
 # the sysusers file for the full account.

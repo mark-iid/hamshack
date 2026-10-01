@@ -1,0 +1,17 @@
+[Unit]
+Description=Poll for a staged image to apply while the machine is idle (DESIGN §8.2)
+
+[Timer]
+# Polling, not scheduling: the interesting event (a staged deployment plus an
+# empty session list) is not something systemd can trigger on. 15 minutes is
+# chosen against how long the machine sits at the greeter — hours — not against
+# how often updates land, which is once a night.
+OnBootSec=20min
+OnUnitActiveSec=15min
+# Deliberately NOT Persistent=true. There is no missed slot to catch up on; the
+# state this looks for is still there on the next tick, and firing at boot would
+# only race the greeter coming up.
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
