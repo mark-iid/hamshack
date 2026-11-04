@@ -8,7 +8,7 @@ description: HP EliteDesk 800 G3 DM 65W, ham shack, niri session
 # session stack and the lessons learned about it. Pinned explicitly; never a
 # floating tag. Bumped by an automated PR (.github/workflows/fedora-version-bump.yml).
 base-image: quay.io/fedora-ostree-desktops/sway-atomic
-image-version: 44
+image-version: 45
 
 # WHAT MAKES THIS IMAGE DIFFERENT FROM kb3lyb-sway, in one place, so the diff
 # between the two repos is never a mystery:
