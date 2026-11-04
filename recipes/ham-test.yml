@@ -14,7 +14,7 @@ name: kb3lyb-ham-test
 description: ham radio stack depsolve smoke test
 
 base-image: quay.io/fedora-ostree-desktops/sway-atomic
-image-version: 44
+image-version: 45
 
 modules:
   - from-file: common/hamradio.yml
